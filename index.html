@@ -105,9 +105,10 @@ footer a{color:var(--moon)}
   <div class="row"><button id="b-start" disabled>Lancer la partie</button><button class="alt" id="b-leave">Quitter</button></div>
 </section>
 <section id="s-game" class="hidden">
-  <div class="panel"><h2>La nuit tombe sur le village</h2><div id="g-table"></div></div>
+  <div class="panel"><h2 id="g-title"></h2><p id="g-msg"></p><div id="g-table"></div></div>
   <div class="panel" id="g-role"><p>Distribution des rôles en cours…</p></div>
-  <div class="panel hidden" id="g-gm"><h2>Vue du Maître du jeu</h2><div id="g-all"></div></div>
+  <div class="panel hidden" id="g-act"></div>
+  <div class="panel hidden" id="g-gm"><h2>Vue du Maître du jeu</h2><div id="g-ctl"></div><h2>Rôles</h2><div id="g-all"></div></div>
   <button class="alt" id="b-leave2">Quitter</button>
 </section>
 </main>
@@ -127,7 +128,7 @@ const firebaseConfig = {
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithPopup,GoogleAuthProvider,signInAnonymously}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,doc,setDoc,getDoc,deleteDoc,collection,onSnapshot,query,where,serverTimestamp,updateDoc,increment}
+import {getFirestore,doc,setDoc,getDoc,deleteDoc,collection,onSnapshot,query,where,serverTimestamp,updateDoc,increment,getDocs}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
@@ -226,7 +227,7 @@ $("b-role-p").onclick=()=>setRole("player");
 $("b-role-gm").onclick=()=>setRole("gm");
 async function leaveRoom(){
   if(!roomCode) return;
-  const code=roomCode, ref=doc(db,"rooms",code); roomCode=null; started=false;
+  const code=roomCode, ref=doc(db,"rooms",code); roomCode=null; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={};
   unsubs.forEach(u=>u()); unsubs=[];
   try{
     await deleteDoc(doc(db,"rooms",code,"players",me.uid));
@@ -283,10 +284,14 @@ $("b-leave2").onclick=$("b-leave").onclick;
 
 function enterGame(){
   if(started) return; started=true; show("s-game"); drawTable();
-  const gm=players.find(p=>p.id===me.uid)?.role==="gm";
-  unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"secret",me.uid),d=>{if(d.exists())showRole(d.data())}));
+  const gm=players.find(p=>p.id===me.uid)?.role==="gm"; IGM=gm;
+  unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"secret",me.uid),d=>{if(d.exists()){mySecret=d.data();
+      if(mySecret.role==="loup"&&!wolfSub){wolfSub=true;unsubs.push(onSnapshot(query(collection(db,"rooms",roomCode,"actions"),where("wolf","==",true)),q=>{WOLF={};q.docs.forEach(x=>WOLF[x.id]=x.data());render()}))}
+      render()}}));
+  unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"state","public"),d=>{if(d.exists()){ST=d.data();render()}}));
   if(gm){
-    $("g-gm").classList.remove("hidden"); deal();
+    $("g-gm").classList.remove("hidden"); $("g-gm").onclick=gmClick; deal();
+    unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"actions"),q=>{ACT={};q.docs.forEach(x=>ACT[x.id]=x.data());render()}));
     unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"secret"),q=>{
       $("g-all").innerHTML=q.docs.map(d=>{const x=d.data(),r=ROLES.find(r=>r[0]===x.role);
         return `<div class="room"><span>${esc(x.name)}</span><b style="color:${COLORS[r[2]]}">${r[1]}</b></div>`}).join("");
@@ -304,16 +309,163 @@ async function deal(){
     const wolves=pl.filter((_,i)=>deck[i]==="loup").map(p=>p.name);
     await Promise.all(pl.map((p,i)=>setDoc(doc(db,"rooms",code,"secret",p.id),
       {role:deck[i],name:p.name,mates:deck[i]==="loup"?wolves.filter(n=>n!==p.name):[]})));
+    G={roles:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]])),couple:null,life:true,poison:true,protect:null,victim:null,poisoned:null,
+       steps:[],done:{},hunters:[],log:[],hidden:c.scen.includes("cache"),voteId:0,next:"day"};
+    ST={phase:"night",turn:1,alive:Object.fromEntries(pl.map(p=>[p.id,true])),dead:[],wake:null,wakeId:0,hunter:null,vote:null,winner:null,final:null,
+        msg:"La nuit tombe. Le MJ réveille les rôles un par un."};
+    startNight(); await push();
   }catch(e){fail(e)}
 }
-function showRole(x){
-  const r=ROLES.find(r=>r[0]===x.role);
-  $("g-role").innerHTML=`<div class="card" style="border-color:${COLORS[r[2]]}"><h2>${r[1]}</h2><p>${r[3]}</p>${x.mates.length?`<p>Ta meute : <b>${x.mates.map(esc).join(", ")}</b></p>`:""}</div>`;
+
+
+// ---------- Étape 3 : moteur de partie (le client du MJ fait office de serveur) ----------
+let ST=null, G=null, ACT={}, WOLF={}, mySecret=null, IGM=false, wolfSub=false, sel=[], saveW=false, lastKey="", sent="", myVote=null, timer;
+const nm=u=>players.find(p=>p.id===u)?.name||"?";
+const rn=r=>(ROLES.find(x=>x[0]===r)||[0,r])[1];
+const alive=()=>Object.keys(ST.alive).filter(k=>ST.alive[k]);
+const holders=r=>alive().filter(u=>G.roles[u]===r);
+const push=()=>setDoc(doc(db,"rooms",roomCode,"state","public"),ST).catch(fail);
+const key=()=>ST.phase+"-"+ST.wakeId+"-"+(ST.vote?.id||0);
+const btn=(u,extra="")=>`<button class="${sel.includes(u)||myVote?.t===u?"":"alt"}" ${extra}="${u}">${esc(nm(u))}</button>`;
+setInterval(()=>{const c=$("cd"); if(c&&ST?.vote) c.textContent=Math.max(0,Math.ceil((ST.vote.end-Date.now())/1000))+" s"},400);
+
+function render(){
+  if(!started||!ST) return;
+  $("g-title").textContent={night:"La nuit tombe sur le village",day:"Le jour se lève",vote:"Le village vote",hunter:"Le chasseur tire",over:"Partie terminée"}[ST.phase]||"";
+  $("g-msg").textContent=ST.msg+(ST.winner?" Victoire : "+ST.winner+".":"");
+  drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
 }
 function drawTable(){
   const pl=players.filter(p=>p.role==="player");
-  $("g-table").innerHTML=pl.map((p,i)=>{const a=2*Math.PI*i/pl.length-Math.PI/2;
-    return `<div class="p" style="position:absolute;left:${50+38*Math.cos(a)}%;top:${50+38*Math.sin(a)}%;transform:translate(-50%,-50%)"><img src="${p.avatar}" alt=""><div>${esc(p.name)}</div></div>`}).join("");
+  $("g-table").innerHTML=pl.map((p,i)=>{const a=2*Math.PI*i/pl.length-Math.PI/2, d=ST?.dead.find(x=>x.uid===p.id);
+    const r=d?.role||ST?.final?.[p.id];
+    return `<div class="p" style="position:absolute;left:${50+38*Math.cos(a)}%;top:${50+38*Math.sin(a)}%;transform:translate(-50%,-50%)"><img src="${p.avatar}" alt="" style="${d?"filter:grayscale(1);opacity:.5":""}"><div>${esc(p.name)}${r?`<br><small>${rn(r)}</small>`:""}</div></div>`}).join("");
+}
+function renderRole(){
+  if(IGM){$("g-role").innerHTML="<p>Tu es le Maître du jeu.</p>";return}
+  const x=mySecret; if(!x) return; const r=ROLES.find(r=>r[0]===x.role);
+  $("g-role").innerHTML=`<div class="card" style="border-color:${COLORS[r[2]]}"><h2>${r[1]}</h2><p>${r[3]}</p>${x.mates.length?`<p>Ta meute : <b>${x.mates.map(esc).join(", ")}</b></p>`:""}${x.info?`<p><b>${esc(x.info)}</b></p>`:""}</div>`;
+}
+function renderAct(){
+  const el=$("g-act"); if(IGM||!mySecret){el.classList.add("hidden");return}
+  if(lastKey!==key()){lastKey=key();sel=[];saveW=false}
+  const r=mySecret.role, ok=()=>sent===key(), others=alive().filter(u=>u!==me.uid); let h="";
+  if(ST.phase==="over") h="La partie est terminée.";
+  else if(ST.phase==="hunter"&&ST.hunter.uid===me.uid) h=ok()?"Tir envoyé.":`<p>Tu es un <b>${ST.hunter.good?"bon":"mauvais"} chasseur</b>${ST.hunter.good?"":" : la roue peut dévier ton tir"}. Choisis ta cible :</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Tirer</button>`;
+  else if(!ST.alive[me.uid]) h="Tu es mort(e). Tu observes la partie en silence.";
+  else if(ST.phase==="vote"){const v=myVote?.id===ST.vote.id?myVote:null; if(v)myVote=v;
+    h=`<p>Qui éliminer ? <b id="cd"></b></p><div class="row">${others.map(u=>btn(u,"data-vote")).join("")}</div>`;}
+  else if(ST.phase==="night"&&ST.wake?.role===r){
+    if(ok()) h="Choix envoyé. Attends que le MJ te rendorme.";
+    else{const max=r==="cupidon"?2:1, w=mySecret.witch;
+      h=r==="sorciere"?`<p>${w?.victim?`Les Loups ont visé <b>${esc(w.victim)}</b>.`:"Personne n'a été visé."}</p>${w?.victim&&w.life?`<button class="${saveW?"":"alt"}" data-save="1">Potion de vie : sauver</button> `:""}${w?.poison?`<p>Potion de poison (optionnel) :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div>`:""}<button data-ok="1">Confirmer</button>`
+        :r==="petitefille"?"Tu observes discrètement les Loups."
+        :`<p>${r==="cupidon"?"Choisis deux amoureux":"Choisis un joueur"} :</p><div class="row">${(r==="salvateur"||r==="cupidon"?alive():others).map(u=>btn(u,"data-t")).join("")}</div>${r==="loup"?`<p>Choix de la meute : ${Object.entries(WOLF).map(([u,a])=>esc(nm(u))+" → "+esc(nm(a.targets[0]))).join(", ")||"aucun"}</p>`:""}<button data-ok="1" ${sel.length===max?"":"disabled"}>Confirmer</button>`;}
+  } else h=ST.phase==="night"?"Tu dors… ferme les yeux.":ST.phase==="day"?"Discutez, puis le MJ lancera le vote.":"";
+  el.innerHTML=h; el.classList.toggle("hidden",!h);
+}
+$("g-act").onclick=async e=>{
+  const b=e.target.closest("button"); if(!b||!ST) return; const d=b.dataset, max=mySecret.role==="cupidon"?2:1;
+  try{
+    if(d.vote){myVote={id:ST.vote.id,t:d.vote}; await setDoc(doc(db,"rooms",roomCode,"votes",me.uid),{id:ST.vote.id,target:d.vote})}
+    else if(d.save) saveW=!saveW;
+    else if(d.t) sel=sel.includes(d.t)?sel.filter(x=>x!==d.t):[...sel,d.t].slice(-max);
+    else if(d.ok){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,targets:sel,save:saveW,wolf:mySecret.role==="loup"}); sent=key()}
+  }catch(err){fail(err)}
+  renderAct();
+};
+
+// --- Côté MJ ---
+const acts=r=>holders(r).map(u=>ACT[u]).filter(a=>a&&a.wakeId===ST.wakeId);
+function ready(s){
+  const a=acts(s), n=holders(s).length; if(a.length<n) return false;
+  if(s==="cupidon") return a[0].targets.length===2;
+  if(s==="sorciere") return true;
+  return a.every(x=>x.targets.length===1&&x.targets[0]===a[0].targets[0]);
+}
+function renderGM(){
+  let h=""; const ph=ST.phase;
+  if(ph==="night"){
+    h=G.steps.map(s=>{const cur=ST.wake?.role===s, a=holders(s).map(u=>ACT[u]?.wakeId===ST.wakeId&&cur?nm(u)+" → "+(ACT[u].targets.map(nm).join(" + ")||"—")+(ACT[u].save?" (sauve)":""):"…");
+      return `<div class="room"><span>${rn(s)} : ${G.done[s]?"fait":cur?a.join(" ; "):"en attente"}</span>${G.done[s]?"":cur?`<button data-a="ok" data-s="${s}" ${ready(s)?"":"disabled"}>Rendormir</button>`:`<button data-a="wake" data-s="${s}" ${ST.wake?"disabled":""}>Réveiller</button>`}</div>`}).join("");
+    if(G.steps.every(s=>G.done[s])) h+=`<div class="row"><button data-a="dawn">Lever le jour</button></div>`;
+  } else if(ph==="day") h=`<div class="row"><button data-a="vote">Lancer le vote (10 s)</button></div>`;
+  else if(ph==="vote") h=`<p>Vote en cours : <b id="cd"></b></p><button data-a="close">Clore le vote maintenant</button>`;
+  else if(ph==="hunter"){const a=ACT[ST.hunter.uid]; h=`<p>Chasseur : ${nm(ST.hunter.uid)} (${ST.hunter.good?"bon":"mauvais"}). ${a?.wakeId===ST.wakeId?"Cible : "+nm(a.targets[0]):"Il choisit…"}</p><button data-a="hunt" ${a?.wakeId===ST.wakeId?"":"disabled"}>Valider le tir</button>`}
+  $("g-ctl").innerHTML=h;
+}
+async function gmClick(e){
+  const b=e.target.closest("button[data-a]"); if(!b) return; const a=b.dataset.a, s=b.dataset.s;
+  try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="close")await closeVote(); if(a==="hunt")await resolveHunter(); }catch(err){fail(err)}
+}
+function startNight(){G.steps=["cupidon","voyante","salvateur","loup","sorciere"].filter(s=>(s!=="cupidon"||ST.turn===1)&&holders(s).length); G.done={}}
+async function wake(s){
+  if(s==="sorciere") await updateDoc(doc(db,"rooms",roomCode,"secret",holders(s)[0]),{witch:{victim:G.victim?nm(G.victim):null,life:G.life,poison:G.poison}});
+  ST.wakeId++; ST.wake={role:s}; await push();
+}
+async function endStep(s){
+  const a=acts(s), h=holders(s), t=a[0].targets, sd=u=>doc(db,"rooms",roomCode,"secret",u);
+  if(s==="cupidon"){G.couple=t; G.log.push(`Cupidon lie ${nm(t[0])} et ${nm(t[1])}`);
+    await Promise.all([[t[0],t[1]],[t[1],t[0]]].map(([x,y])=>updateDoc(sd(x),{info:`Tu es amoureux(se) de ${nm(y)}. Vous gagnez ensemble.`})));
+    await updateDoc(sd(h[0]),{info:`Tu as lié ${nm(t[0])} et ${nm(t[1])}.`});}
+  if(s==="voyante"){G.log.push(`Voyante observe ${nm(t[0])} (${rn(G.roles[t[0]])})`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est ${rn(G.roles[t[0]])}.`});}
+  if(s==="salvateur"){G.protect=t[0]; G.log.push(`Salvateur protège ${nm(t[0])}`);}
+  if(s==="loup"){G.victim=t[0]; G.log.push(`Les Loups visent ${nm(t[0])}`);}
+  if(s==="sorciere"){const x=a[0];
+    if(x.save&&G.life&&G.victim){G.life=false; G.log.push(`Sorcière sauve ${nm(G.victim)}`); G.victim=null}
+    if(x.targets[0]&&G.poison){G.poison=false; G.poisoned=x.targets[0]; G.log.push(`Sorcière empoisonne ${nm(x.targets[0])}`)}}
+  G.done[s]=true; ST.wake=null; await push();
+}
+function kill(u,cause){
+  if(!ST.alive[u]) return; ST.alive[u]=false;
+  ST.dead.push({uid:u,name:nm(u),role:G.hidden?"":G.roles[u]}); G.log.push(`${nm(u)} (${rn(G.roles[u])}) meurt : ${cause}`);
+  if(G.roles[u]==="chasseur") G.hunters.push(u);
+  if(G.couple?.includes(u)) kill(G.couple.find(x=>x!==u),"chagrin d’amour");
+}
+function winner(){
+  const al=alive(), w=al.filter(u=>G.roles[u]==="loup").length;
+  if(G.couple&&al.length===2&&G.couple.every(u=>ST.alive[u])) return "les amoureux";
+  if(w===0) return "le village"; if(w>=al.length-w) return "les Loups-Garous"; return null;
+}
+async function after(next){
+  if(G.hunters.length){const h=G.hunters.shift(), good=Math.random()<.5, fires=good||Math.random()<.5;
+    G.log.push(`${nm(h)} (Chasseur) : ${good?"bon":"mauvais"} chasseur${fires?"":", son tir est raté"}`);
+    if(fires){ST.phase="hunter"; ST.hunter={uid:h,good}; ST.wakeId++; G.next=next; await push(); return}
+    return after(next)}
+  ST.hunter=null; const w=winner();
+  if(w){ST.phase="over"; ST.winner=w; ST.final=G.roles; G.log.push("Victoire : "+w); await push(); return}
+  if(next==="night"){G.victim=G.poisoned=G.protect=null; ST.turn++; ST.phase="night"; ST.wake=null; ST.vote=null; ST.msg=`Nuit ${ST.turn}.`; startNight()}
+  else{ST.phase="day"; ST.wake=null}
+  await push();
+}
+async function dawn(){
+  const before=alive();
+  if(G.victim&&G.victim!==G.protect) kill(G.victim,"attaqué par les Loups");
+  if(G.poisoned) kill(G.poisoned,"empoisonné");
+  const d=before.filter(u=>!ST.alive[u]);
+  ST.msg=d.length?"Cette nuit, sont morts : "+d.map(nm).join(", ")+".":"Personne n'est mort cette nuit.";
+  await after("day");
+}
+async function startVote(){
+  ST.phase="vote"; ST.vote={id:++G.voteId,end:Date.now()+10000}; await push();
+  clearTimeout(timer); timer=setTimeout(()=>closeVote().catch(fail),10800);
+}
+async function closeVote(){
+  if(ST.phase!=="vote") return; clearTimeout(timer);
+  const q=await getDocs(collection(db,"rooms",roomCode,"votes")), c={};
+  q.docs.forEach(d=>{const v=d.data(); if(v.id===ST.vote.id&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+1});
+  const max=Math.max(0,...Object.values(c)), top=Object.keys(c).filter(u=>c[u]===max);
+  G.log.push("Vote : "+(Object.entries(c).map(([u,n])=>nm(u)+" "+n).join(", ")||"aucun vote"));
+  if(top.length===1){kill(top[0],"éliminé par le village"); ST.msg=`Le village a éliminé ${nm(top[0])}.`; ST.vote=null; return after("night")}
+  if(alive().length<=3&&top.length>1){ST.msg="Égalité à 3 joueurs : nouveau vote !"; return startVote()}
+  ST.msg="Égalité : personne n'est éliminé."; ST.vote=null; await after("night");
+}
+async function resolveHunter(){
+  const h=ST.hunter, a=ACT[h.uid]; if(a?.wakeId!==ST.wakeId) return;
+  const t=a.targets[0]; let v=t; ST.msg=`${nm(h.uid)} tire sur ${nm(t)}.`;
+  if(!h.good){const o=players.filter(p=>p.role==="player"&&ST.alive[p.id]).map(p=>p.id), side=Math.random()<.5?-1:1;
+    v=o[(o.indexOf(t)+side+o.length)%o.length]; ST.msg+=` La roue (${side<0?"gauche":"droite"}) touche ${nm(v)}.`}
+  kill(v,"tir du chasseur"); ST.hunter=null; await after(G.next);
 }
 </script>
 </body>
