@@ -286,7 +286,8 @@ let cfg={roles:{loup:1,villageois:1},scen:[]}, players=[], plCount=0, gmCount=0,
 const total=()=>Object.values(cfg.roles).reduce((a,b)=>a+b,0);
 let hostUid=null, amGm=false, cfgLoaded=false;
 const isHost=()=>!!me&&hostUid===me.uid;
-const saveCfg=()=>setDoc(doc(db,"rooms",roomCode,"private","config"),cfg).catch(fail);
+const saveCfg=()=>setDoc(doc(db,"rooms",roomCode,"private","config"),cfg)
+  .catch(()=>setTimeout(()=>roomCode&&setDoc(doc(db,"rooms",roomCode,"private","config"),cfg).catch(fail),1500));
 
 function refreshStart(){
   $("h-total").textContent=`${total()} rôles pour ${plCount} joueurs`+(total()===plCount?" : parfait.":" : le nombre doit être identique.");
@@ -647,9 +648,14 @@ async function closeVoice(){
   if(voiceOn&&roomCode) await deleteDoc(doc(db,"rooms",roomCode,"rtcp",me.uid)).catch(()=>{});
   voiceOn=false; $("b-voice").textContent="Activer le vocal"; $("v-state").textContent="";
 }
+let cfgTry=0, cfgUnsub=null;
 function ensureCfg(){
-  if(cfgLoaded) return; cfgLoaded=true;
-  unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"private","config"),d=>{if(d.exists()){cfg=d.data(); renderHost()} else saveCfg()},fail));
+  if(cfgLoaded) return; cfgLoaded=true; renderHost();
+  // Juste après être devenu MJ, le serveur peut ne pas encore connaître ce rôle : on réessaie.
+  cfgUnsub=onSnapshot(doc(db,"rooms",roomCode,"private","config"),
+    d=>{cfgTry=0; $("err").textContent=""; if(d.exists()){cfg=d.data(); renderHost()} else saveCfg()},
+    e=>{cfgLoaded=false; if(++cfgTry<6) setTimeout(()=>{if(amGm&&roomCode)ensureCfg()},1200); else fail(e)});
+  unsubs.push(()=>cfgUnsub&&cfgUnsub());
 }
 async function kicked(){
   roomCode=null; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false;
