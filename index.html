@@ -252,9 +252,17 @@ const ROLES=[
  ["chasseur","Chasseur","village","À sa mort : pile ou face, tir éventuel, roue gauche/droite.",1],
  ["cupidon","Cupidon","switch","Lie deux joueurs par l’amour la première nuit.",1],
  ["salvateur","Salvateur","village","Protège un joueur des Loups chaque nuit.",1],
- ["petitefille","Petite fille","village","Se réveille avec les Loups, en restant discrète.",1]];
+ ["petitefille","Petite fille","village","Se réveille avec les Loups, en restant discrète.",1],
+ ["detective","Détective","village","Chaque nuit, il choisit deux joueurs : « Oui » s’ils sont du même camp, « Non » sinon.",1],
+ ["pronostiqueur","Pronostiqueur","village","Chaque nuit, il désigne un joueur et reçoit « Gentil » ou « Méchant » (le MJ peut mentir).",1],
+ ["lapin","Lapin","village","3 fois par partie, il se cache la nuit : immunisé contre les Loups et la Sorcière.",1],
+ ["dictateur","Dictateur","switch","Une fois par partie, coup d’État : sa cible meurt à la place du vote. Un Loup : il devient Maire. Un Villageois : il meurt.",1],
+ ["ange","Ange","solo","Il gagne s’il est éliminé au premier vote du village. Sinon, il devient Villageois.",1],
+ ["bouffon","Bouffon","solo","Il gagne s’il est éliminé par le vote du village.",1],
+ ["loupranc","Loup Rancunier","wolf","Se réveille avec les Loups. S’il est éliminé par le vote, il emporte un électeur avec lui.",1]];
+const isW=r=>r==="loup"||r==="loupranc";
 const COLORS={wolf:"#c8463c",village:"#4caf7a",switch:"#f2c94c",solo:"#f28c28"};
-const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée"],["canicule","Canicule"]];
+const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut (bientôt)"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée (bientôt)"],["canicule","Canicule"]];
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let cfg={roles:{loup:1,villageois:1},scen:[]}, players=[], plCount=0, gmCount=0, started=false;
 const total=()=>Object.values(cfg.roles).reduce((a,b)=>a+b,0);
@@ -286,11 +294,11 @@ function enterGame(){
   if(started) return; started=true; show("s-game"); drawTable();
   const gm=players.find(p=>p.id===me.uid)?.role==="gm"; IGM=gm;
   unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"secret",me.uid),d=>{if(d.exists()){mySecret=d.data();
-      if(mySecret.role==="loup"&&!wolfSub){wolfSub=true;unsubs.push(onSnapshot(query(collection(db,"rooms",roomCode,"actions"),where("wolf","==",true)),q=>{WOLF={};q.docs.forEach(x=>WOLF[x.id]=x.data());render()}))}
+      if(isW(mySecret.role)&&!wolfSub){wolfSub=true;unsubs.push(onSnapshot(query(collection(db,"rooms",roomCode,"actions"),where("wolf","==",true)),q=>{WOLF={};q.docs.forEach(x=>WOLF[x.id]=x.data());render()}))}
       render()}}));
   unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"state","public"),d=>{if(d.exists()){ST=d.data();render()}}));
   if(gm){
-    $("g-gm").classList.remove("hidden"); $("g-gm").onclick=gmClick; deal();
+    $("g-gm").classList.remove("hidden"); $("g-gm").onclick=gmClick; $("g-gm").onchange=e=>{if(e.target.id==="lie")G.lie=e.target.checked}; deal();
     unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"actions"),q=>{ACT={};q.docs.forEach(x=>ACT[x.id]=x.data());render()}));
     unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"secret"),q=>{
       $("g-all").innerHTML=q.docs.map(d=>{const x=d.data(),r=ROLES.find(r=>r[0]===x.role);
@@ -306,11 +314,11 @@ async function deal(){
     Object.entries(c.roles).forEach(([k,n])=>{for(let i=0;i<n;i++)deck.push(k)});
     if(deck.length!==pl.length) throw {message:"Nombre de rôles différent du nombre de joueurs."};
     for(let i=deck.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[deck[i],deck[j]]=[deck[j],deck[i]]}
-    const wolves=pl.filter((_,i)=>deck[i]==="loup").map(p=>p.name);
+    const wolves=pl.filter((_,i)=>isW(deck[i])).map(p=>p.name);
     await Promise.all(pl.map((p,i)=>setDoc(doc(db,"rooms",code,"secret",p.id),
-      {role:deck[i],name:p.name,mates:deck[i]==="loup"?wolves.filter(n=>n!==p.name):[]})));
+      {role:deck[i],name:p.name,mates:isW(deck[i])?wolves.filter(n=>n!==p.name):[]})));
     G={roles:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]])),couple:null,life:true,poison:true,protect:null,victim:null,poisoned:null,
-       steps:[],done:{},hunters:[],log:[],hidden:c.scen.includes("cache"),voteId:0,next:"day"};
+       steps:[],done:{},hunters:[],log:[],hidden:c.scen.includes("cache"),scen:c.scen,voteId:0,voteN:0,next:"day",rabbitLeft:3,dictLeft:1,rabbitHide:null,coup:null,alpha:null,lie:false,mayor:null};
     ST={phase:"night",turn:1,alive:Object.fromEntries(pl.map(p=>[p.id,true])),dead:[],wake:null,wakeId:0,hunter:null,vote:null,winner:null,final:null,
         msg:"La nuit tombe. Le MJ réveille les rôles un par un."};
     startNight(); await push();
@@ -323,7 +331,7 @@ let ST=null, G=null, ACT={}, WOLF={}, mySecret=null, IGM=false, wolfSub=false, s
 const nm=u=>players.find(p=>p.id===u)?.name||"?";
 const rn=r=>(ROLES.find(x=>x[0]===r)||[0,r])[1];
 const alive=()=>Object.keys(ST.alive).filter(k=>ST.alive[k]);
-const holders=r=>alive().filter(u=>G.roles[u]===r);
+const holders=r=>alive().filter(u=>r==="loup"?isW(G.roles[u]):G.roles[u]===r);
 const push=()=>setDoc(doc(db,"rooms",roomCode,"state","public"),ST).catch(fail);
 const key=()=>ST.phase+"-"+ST.wakeId+"-"+(ST.vote?.id||0);
 const btn=(u,extra="")=>`<button class="${sel.includes(u)||myVote?.t===u?"":"alt"}" ${extra}="${u}">${esc(nm(u))}</button>`;
@@ -355,33 +363,36 @@ function renderAct(){
   else if(!ST.alive[me.uid]) h="Tu es mort(e). Tu observes la partie en silence.";
   else if(ST.phase==="vote"){const v=myVote?.id===ST.vote.id?myVote:null; if(v)myVote=v;
     h=`<p>Qui éliminer ? <b id="cd"></b></p><div class="row">${others.map(u=>btn(u,"data-vote")).join("")}</div>`;}
-  else if(ST.phase==="night"&&ST.wake?.role===r){
+  else if(ST.phase==="night"&&ST.wake?.role===(isW(r)?"loup":r)){
     if(ok()) h="Choix envoyé. Attends que le MJ te rendorme.";
-    else{const max=r==="cupidon"?2:1, w=mySecret.witch;
+    else{const max=ST.wake.max||1, w=mySecret.witch, ab=mySecret.ability;
       h=r==="sorciere"?`<p>${w?.victim?`Les Loups ont visé <b>${esc(w.victim)}</b>.`:"Personne n'a été visé."}</p>${w?.victim&&w.life?`<button class="${saveW?"":"alt"}" data-save="1">Potion de vie : sauver</button> `:""}${w?.poison?`<p>Potion de poison (optionnel) :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div>`:""}<button data-ok="1">Confirmer</button>`
+        
+        :r==="lapin"?`<p>Cachettes restantes : ${ab?.left}</p>${ab?.left>0?`<button class="${saveW?"":"alt"}" data-save="1">Se cacher cette nuit</button> `:""}<button data-ok="1">Confirmer</button>`
+        :r==="dictateur"?`<p>Coups d’État restants : ${ab?.left}</p><button class="${saveW?"":"alt"}" data-save="1">Faire un coup d’État</button><p>Cible :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${!saveW||sel.length?"":"disabled"}>Confirmer</button>`
         :r==="petitefille"?"Tu observes discrètement les Loups."
-        :`<p>${r==="cupidon"?"Choisis deux amoureux":"Choisis un joueur"} :</p><div class="row">${(r==="salvateur"||r==="cupidon"?alive():others).map(u=>btn(u,"data-t")).join("")}</div>${r==="loup"?`<p>Choix de la meute : ${Object.entries(WOLF).map(([u,a])=>esc(nm(u))+" → "+esc(nm(a.targets[0]))).join(", ")||"aucun"}</p>`:""}<button data-ok="1" ${sel.length===max?"":"disabled"}>Confirmer</button>`;}
+        :`<p>${max>1?"Choisis "+max+" joueurs":"Choisis un joueur"} :</p><div class="row">${(["salvateur","cupidon","detective"].includes(r)?alive():others).map(u=>btn(u,"data-t")).join("")}</div>${isW(r)?`<p>Choix de la meute : ${Object.entries(WOLF).map(([u,a])=>esc(nm(u))+" → "+esc(nm(a.targets[0]))).join(", ")||"aucun"}</p>`:""}<button data-ok="1" ${sel.length===max?"":"disabled"}>Confirmer</button>`;}
   } else h=ST.phase==="night"?"Tu dors… ferme les yeux.":ST.phase==="day"?"Discutez, puis le MJ lancera le vote.":"";
   el.innerHTML=h; el.classList.toggle("hidden",!h);
 }
 $("g-act").onclick=async e=>{
-  const b=e.target.closest("button"); if(!b||!ST) return; const d=b.dataset, max=mySecret.role==="cupidon"?2:1;
+  const b=e.target.closest("button"); if(!b||!ST) return; const d=b.dataset, max=ST.phase==="night"?(ST.wake?.max||1):1;
   try{
     if(d.vote){myVote={id:ST.vote.id,t:d.vote}; await setDoc(doc(db,"rooms",roomCode,"votes",me.uid),{id:ST.vote.id,target:d.vote})}
     else if(d.save) saveW=!saveW;
     else if(d.t) sel=sel.includes(d.t)?sel.filter(x=>x!==d.t):[...sel,d.t].slice(-max);
-    else if(d.ok){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,targets:sel,save:saveW,wolf:mySecret.role==="loup"}); sent=key()}
+    else if(d.ok){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,targets:sel,save:saveW,wolf:isW(mySecret.role)}); sent=key()}
   }catch(err){fail(err)}
   renderAct();
 };
 
 // --- Côté MJ ---
 const acts=r=>holders(r).map(u=>ACT[u]).filter(a=>a&&a.wakeId===ST.wakeId);
+const maxOf=s=>s==="cupidon"?(G.scen.includes("trouple")?3:2):s==="detective"?2:1;
 function ready(s){
   const a=acts(s), n=holders(s).length; if(a.length<n) return false;
-  if(s==="cupidon") return a[0].targets.length===2;
-  if(s==="sorciere") return true;
-  return a.every(x=>x.targets.length===1&&x.targets[0]===a[0].targets[0]);
+  if(["sorciere","lapin","dictateur"].includes(s)) return true;
+  return a.every(x=>x.targets.length===maxOf(s)&&x.targets.join()===a[0].targets.join());
 }
 function renderGM(){
   let h=""; const ph=ST.phase;
@@ -392,39 +403,48 @@ function renderGM(){
   } else if(ph==="day") h=`<div class="row"><button data-a="vote">Lancer le vote (10 s)</button></div>`;
   else if(ph==="vote") h=`<p>Vote en cours : <b id="cd"></b></p><button data-a="close">Clore le vote maintenant</button>`;
   else if(ph==="hunter"){const a=ACT[ST.hunter.uid]; h=`<p>Chasseur : ${nm(ST.hunter.uid)} (${ST.hunter.good?"bon":"mauvais"}). ${a?.wakeId===ST.wakeId?"Cible : "+nm(a.targets[0]):"Il choisit…"}</p><button data-a="hunt" ${a?.wakeId===ST.wakeId?"":"disabled"}>Valider le tir</button>`}
+  if(ph==="night"&&Object.values(G.roles).includes("pronostiqueur")) h+=`<label class="room"><span>Le Pronostiqueur ment</span><input type="checkbox" id="lie" style="width:auto" ${G.lie?"checked":""}></label>`;
   $("g-ctl").innerHTML=h;
 }
 async function gmClick(e){
   const b=e.target.closest("button[data-a]"); if(!b) return; const a=b.dataset.a, s=b.dataset.s;
   try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="close")await closeVote(); if(a==="hunt")await resolveHunter(); }catch(err){fail(err)}
 }
-function startNight(){G.steps=["cupidon","voyante","salvateur","loup","sorciere"].filter(s=>(s!=="cupidon"||ST.turn===1)&&holders(s).length); G.done={}}
+function startNight(){G.steps=["cupidon","detective","voyante","pronostiqueur","salvateur","lapin","dictateur","loup","sorciere"]
+  .filter(s=>(s!=="cupidon"||ST.turn===1)&&(s!=="lapin"||G.rabbitLeft>0)&&(s!=="dictateur"||(G.dictLeft>0&&!G.coup))&&holders(s).length); G.done={}}
 async function wake(s){
   if(s==="sorciere") await updateDoc(doc(db,"rooms",roomCode,"secret",holders(s)[0]),{witch:{victim:G.victim?nm(G.victim):null,life:G.life,poison:G.poison}});
-  ST.wakeId++; ST.wake={role:s}; await push();
+  if(s==="lapin"||s==="dictateur") await updateDoc(doc(db,"rooms",roomCode,"secret",holders(s)[0]),{ability:{left:s==="lapin"?G.rabbitLeft:G.dictLeft}});
+  ST.wakeId++; ST.wake={role:s,max:maxOf(s)}; await push();
 }
 async function endStep(s){
   const a=acts(s), h=holders(s), t=a[0].targets, sd=u=>doc(db,"rooms",roomCode,"secret",u);
-  if(s==="cupidon"){G.couple=t; G.log.push(`Cupidon lie ${nm(t[0])} et ${nm(t[1])}`);
-    await Promise.all([[t[0],t[1]],[t[1],t[0]]].map(([x,y])=>updateDoc(sd(x),{info:`Tu es amoureux(se) de ${nm(y)}. Vous gagnez ensemble.`})));
-    await updateDoc(sd(h[0]),{info:`Tu as lié ${nm(t[0])} et ${nm(t[1])}.`});}
+  if(s==="cupidon"){G.couple=t; G.log.push("Cupidon lie "+t.map(nm).join(", "));
+    await Promise.all(t.map(x=>updateDoc(sd(x),{info:`Tu es amoureux(se) de ${t.filter(y=>y!==x).map(nm).join(" et ")}. Vous gagnez ensemble.`})));
+    await updateDoc(sd(h[0]),{info:`Tu as lié ${t.map(nm).join(", ")}.`});}
   if(s==="voyante"){G.log.push(`Voyante observe ${nm(t[0])} (${rn(G.roles[t[0]])})`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est ${rn(G.roles[t[0]])}.`});}
   if(s==="salvateur"){G.protect=t[0]; G.log.push(`Salvateur protège ${nm(t[0])}`);}
   if(s==="loup"){G.victim=t[0]; G.log.push(`Les Loups visent ${nm(t[0])}`);}
   if(s==="sorciere"){const x=a[0];
     if(x.save&&G.life&&G.victim){G.life=false; G.log.push(`Sorcière sauve ${nm(G.victim)}`); G.victim=null}
     if(x.targets[0]&&G.poison){G.poison=false; G.poisoned=x.targets[0]; G.log.push(`Sorcière empoisonne ${nm(x.targets[0])}`)}}
+  const camp=u=>isW(G.roles[u])?"w":["ange","bouffon"].includes(G.roles[u])?"s":"v";
+  if(s==="detective"){const same=camp(t[0])===camp(t[1]); G.log.push(`Détective compare ${nm(t[0])} et ${nm(t[1])} : ${same?"Oui":"Non"}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} et ${nm(t[1])} sont du même camp ? ${same?"Oui":"Non"}.`});}
+  if(s==="pronostiqueur"){const good=camp(t[0])!=="w", shown=G.lie?!good:good; G.log.push(`Pronostiqueur : ${nm(t[0])} = ${shown?"Gentil":"Méchant"}${G.lie?" (mensonge)":""}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est ${shown?"Gentil":"Méchant"}.`});}
+  if(s==="lapin"&&a[0].save&&G.rabbitLeft>0){G.rabbitLeft--; G.rabbitHide=h[0]; G.log.push("Lapin se cache");}
+  if(s==="dictateur"&&a[0].save&&t[0]&&G.dictLeft>0){G.dictLeft--; G.coup={by:h[0],t:t[0]}; G.log.push(`Dictateur prépare un coup d’État contre ${nm(t[0])}`);}
   G.done[s]=true; ST.wake=null; await push();
 }
 function kill(u,cause){
   if(!ST.alive[u]) return; ST.alive[u]=false;
   ST.dead.push({uid:u,name:nm(u),role:G.hidden?"":G.roles[u]}); G.log.push(`${nm(u)} (${rn(G.roles[u])}) meurt : ${cause}`);
   if(G.roles[u]==="chasseur") G.hunters.push(u);
-  if(G.couple?.includes(u)) kill(G.couple.find(x=>x!==u),"chagrin d’amour");
+  if(G.couple?.includes(u)) G.couple.filter(x=>x!==u).forEach(x=>kill(x,"chagrin d’amour"));
 }
 function winner(){
-  const al=alive(), w=al.filter(u=>G.roles[u]==="loup").length;
-  if(G.couple&&al.length===2&&G.couple.every(u=>ST.alive[u])) return "les amoureux";
+  const al=alive(), w=al.filter(u=>isW(G.roles[u])).length;
+  if(G.couple&&al.length>=2&&al.every(u=>G.couple.includes(u))) return "les amoureux";
+  if(G.alpha&&ST.alive[G.alpha]) return al.length===1?"le Loup Alpha":null;
   if(w===0) return "le village"; if(w>=al.length-w) return "les Loups-Garous"; return null;
 }
 async function after(next){
@@ -434,29 +454,44 @@ async function after(next){
     return after(next)}
   ST.hunter=null; const w=winner();
   if(w){ST.phase="over"; ST.winner=w; ST.final=G.roles; G.log.push("Victoire : "+w); await push(); return}
-  if(next==="night"){G.victim=G.poisoned=G.protect=null; ST.turn++; ST.phase="night"; ST.wake=null; ST.vote=null; ST.msg=`Nuit ${ST.turn}.`; startNight()}
+  if(next==="night"&&G.scen.includes("canicule")&&ST.turn>=6){alive().forEach(u=>kill(u,"canicule")); ST.phase="over"; ST.winner="personne (canicule)"; ST.final=G.roles; await push(); return}
+  if(next==="night"){G.victim=G.poisoned=G.protect=G.rabbitHide=null; ST.turn++; ST.phase="night"; ST.wake=null; ST.vote=null; ST.msg=`Nuit ${ST.turn}.`;
+    const ws=alive().filter(u=>isW(G.roles[u]));
+    if(G.scen.includes("alpha")&&ST.turn===3&&!G.alpha&&ws.length){G.alpha=ws[Math.random()*ws.length|0]; G.log.push("Loup Alpha : "+nm(G.alpha)); await updateDoc(doc(db,"rooms",roomCode,"secret",G.alpha),{info:"Tu es le Loup Alpha : tu gagnes seul en éliminant tout le monde."})}
+    startNight()}
   else{ST.phase="day"; ST.wake=null}
   await push();
 }
 async function dawn(){
   const before=alive();
-  if(G.victim&&G.victim!==G.protect) kill(G.victim,"attaqué par les Loups");
-  if(G.poisoned) kill(G.poisoned,"empoisonné");
+  if(G.victim&&G.victim!==G.protect&&G.victim!==G.rabbitHide) kill(G.victim,"attaqué par les Loups");
+  if(G.poisoned&&G.poisoned!==G.rabbitHide) kill(G.poisoned,"empoisonné");
   const d=before.filter(u=>!ST.alive[u]);
   ST.msg=d.length?"Cette nuit, sont morts : "+d.map(nm).join(", ")+".":"Personne n'est mort cette nuit.";
   await after("day");
 }
 async function startVote(){
+  if(G.coup){const {by,t}=G.coup; G.coup=null;
+    if(ST.alive[by]&&ST.alive[t]){ST.vote=null;
+      if(isW(G.roles[t])){kill(t,"coup d’État"); G.mayor=by; ST.msg=`Coup d’État ! ${nm(by)} élimine ${nm(t)}, un Loup-Garou, et devient Maire.`}
+      else{kill(t,"coup d’État"); kill(by,"coup d’État raté"); ST.msg=`Coup d’État raté : ${nm(by)} a éliminé un innocent (${nm(t)}) et meurt.`}
+      return after("night")}}
   ST.phase="vote"; ST.vote={id:++G.voteId,end:Date.now()+10000}; await push();
   clearTimeout(timer); timer=setTimeout(()=>closeVote().catch(fail),10800);
 }
 async function closeVote(){
-  if(ST.phase!=="vote") return; clearTimeout(timer);
+  if(ST.phase!=="vote") return; clearTimeout(timer); G.voteN++; const vid=ST.vote.id;
   const q=await getDocs(collection(db,"rooms",roomCode,"votes")), c={};
   q.docs.forEach(d=>{const v=d.data(); if(v.id===ST.vote.id&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+1});
   const max=Math.max(0,...Object.values(c)), top=Object.keys(c).filter(u=>c[u]===max);
   G.log.push("Vote : "+(Object.entries(c).map(([u,n])=>nm(u)+" "+n).join(", ")||"aucun vote"));
-  if(top.length===1){kill(top[0],"éliminé par le village"); ST.msg=`Le village a éliminé ${nm(top[0])}.`; ST.vote=null; return after("night")}
+  if(top.length===1){const u=top[0], r=G.roles[u];
+    kill(u,"éliminé par le village"); ST.msg=`Le village a éliminé ${nm(u)}.`; ST.vote=null;
+    const won=(r==="bouffon")?"le Bouffon":(r==="ange"&&G.voteN===1)?"l’Ange":null;
+    if(won){ST.phase="over"; ST.winner=won; ST.final=G.roles; G.log.push("Victoire : "+won); await push(); return}
+    if(r==="loupranc"){const vs=q.docs.filter(d=>d.data().id===vid).filter(d=>d.data().target===u&&ST.alive[d.id]).map(d=>d.id);
+      if(vs.length){const v=vs[Math.random()*vs.length|0]; kill(v,"vengeance du Loup Rancunier"); ST.msg+=` Le Loup Rancunier emporte ${nm(v)} avec lui.`}}
+    return after("night")}
   if(alive().length<=3&&top.length>1){ST.msg="Égalité à 3 joueurs : nouveau vote !"; return startVote()}
   ST.msg="Égalité : personne n'est éliminé."; ST.vote=null; await after("night");
 }
