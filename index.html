@@ -15,9 +15,18 @@ body{transition:background .8s}
 body[data-phase="night"]{background:#0c1220}
 body[data-phase="day"],body[data-phase="vote"]{background:#33476b}
 .big{font-size:2.2rem;vertical-align:middle}
+#fx{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:5rem;pointer-events:none;opacity:0;z-index:20;background:rgba(0,0,0,.45);text-align:center}
+#fx.show{animation:fxin 2.2s ease}
+#fx small{font-size:1.5rem;color:var(--moon);font-family:Almendra,serif}
+@keyframes fxin{0%{opacity:0}15%{opacity:1}80%{opacity:1}100%{opacity:0}}
+.spin{display:inline-block;animation:spinw 1.4s cubic-bezier(.2,.7,.2,1)}
+@keyframes spinw{from{transform:rotate(0)}to{transform:rotate(1080deg)}}
+.card{animation:reveal .7s ease}
+@keyframes reveal{from{transform:rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
+@media (max-width:480px){main{padding:12px 10px 110px}h1{font-size:1.7rem}.panel{padding:12px}#g-table .p{font-size:.72rem}#g-table .p img{width:40px;height:40px}#voice{left:8px;right:8px;justify-content:space-between}}
 .coin{display:inline-block;animation:flip 1.2s ease-out}
 @keyframes flip{from{transform:rotateY(0)}to{transform:rotateY(1440deg)}}
-@media (prefers-reduced-motion:reduce){.coin{animation:none}body{transition:none}}
+@media (prefers-reduced-motion:reduce){.coin,.spin,.card{animation:none}body{transition:none}}
 h1,h2{font-family:Almendra,serif;margin:0 0 12px;color:var(--moon)}
 h1{font-size:2.2rem;text-align:center;margin-top:24px}
 .panel{background:var(--panel);border-radius:14px;padding:18px;margin-bottom:16px}
@@ -122,7 +131,8 @@ footer a{color:var(--moon)}
   <div class="row"><button class="alt" id="b-leave2">Quitter</button><button id="b-replay" class="hidden">Rejouer</button></div>
 </section>
 </main>
-<div id="voice" class="hidden"><button id="b-voice" type="button">Activer le vocal</button><span id="v-state"></span></div>
+<div id="fx" aria-live="polite"></div>
+<div id="voice" class="hidden"><button id="b-snd" class="alt" type="button" title="Sons">🔊</button><button id="b-voice" type="button">Activer le vocal</button><span id="v-state"></span></div>
 <footer>Idée de <a href="https://www.twitch.tv/doogbarrow" target="_blank" rel="noopener">DoogBarrow</a> et créé par <a href="https://www.twitch.tv/crackersmc_" target="_blank" rel="noopener">CrackersMc</a></footer>
 
 <script type="module">
@@ -148,6 +158,8 @@ const show=id=>{if(id!=="s-game") document.body.dataset.phase=""; ["s-login","s-
 const fail=e=>{$("err").textContent=e.message||String(e)};
 let me=null, profile=null, roomCode=null, unsubs=[];
 const MAX_PLAYERS=12;
+// Optionnel : serveur vocal LiveKit (voir livekit-token-worker.js). Laisse vide pour garder le vocal direct.
+const LIVEKIT={url:"",tokenUrl:""};
 
 // ---------- Connexion ----------
 $("b-google").onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(fail);
@@ -335,7 +347,7 @@ $("l-players").onclick=async e=>{const b=e.target.closest("[data-kick]"); if(!b|
   try{await deleteDoc(doc(db,"rooms",roomCode,"players",b.dataset.kick)); await updateDoc(doc(db,"rooms",roomCode),{count:increment(-1),banned:arrayUnion(b.dataset.kick),...(players.find(p=>p.id===b.dataset.kick)?.role==="gm"?{gmUid:null}:{})})}catch(err){fail(err)}};
 
 function enterGame(){
-  if(started) return; if(!players.some(p=>p.id===me.uid)){setTimeout(enterGame,300);return} started=true; show("s-game"); drawTable();
+  if(started) return; lastPh=""; lastDead=-1; lastFx=0; if(!players.some(p=>p.id===me.uid)){setTimeout(enterGame,300);return} started=true; show("s-game"); drawTable();
   const gm=players.find(p=>p.id===me.uid)?.role==="gm"; IGM=gm;
   unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"secret",me.uid),d=>{if(d.exists()){mySecret=d.data();
       if((isW(mySecret.role)||mySecret.wolfx||mySecret.role==="petitefille")&&!wolfSub){wolfSub=true;unsubs.push(onSnapshot(query(collection(db,"rooms",roomCode,"actions"),where("wolf","==",true)),q=>{WOLF={};q.docs.forEach(x=>WOLF[x.id]=x.data());render()}))}
@@ -389,7 +401,7 @@ function render(){
   if(!started||!ST) return;
   $("g-title").textContent={night:"La nuit tombe sur le village",day:"Le jour se lève",vote:"Le village vote",hunter:"Le chasseur tire",curieux:"Le Loup Curieux enquête",bienaimee:"La Sorcière Bien Aimée parle",over:"Partie terminée"}[ST.phase]||"";
   $("g-msg").textContent=ST.msg+(ST.winner?" Victoire : "+ST.winner+".":"");
-  document.body.dataset.phase=ST.phase; drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
+  document.body.dataset.phase=ST.phase; effects(); drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
   $("b-replay").classList.toggle("hidden",!(isHost()&&ST.phase==="over")); applyMute();
 }
 function drawTable(){
@@ -544,6 +556,7 @@ function winner(){
 async function after(next){
   if(G.hunters.length){const h=G.hunters.shift(), good=Math.random()<.5, fires=good||Math.random()<.5;
     G.log.push(`${nm(h)} (Chasseur) : ${good?"bon":"mauvais"} chasseur${fires?"":", son tir est raté"}`);
+    ST.fx={k:"coin",good,id:Date.now(),miss:!fires}; if(!fires) ST.msg=`${nm(h)} (Chasseur) est un mauvais chasseur : son tir est raté.`;
     if(fires){ST.phase="hunter"; ST.hunter={uid:h,good}; ST.wakeId++; G.next=next; await push(); return}
     return after(next)}
   ST.hunter=null; await flush();
@@ -608,7 +621,7 @@ async function resolveHunter(){
   const h=ST.hunter, a=ACT[h.uid]; if(a?.wakeId!==ST.wakeId) return;
   const t=a.targets[0]; let v=t; ST.msg=`${nm(h.uid)} tire sur ${nm(t)}.`;
   if(!h.good){const o=players.filter(p=>p.role==="player"&&ST.alive[p.id]).map(p=>p.id), side=Math.random()<.5?-1:1;
-    v=o[(o.indexOf(t)+side+o.length)%o.length]; ST.msg+=` La roue (${side<0?"gauche":"droite"}) touche ${nm(v)}.`}
+    v=o[(o.indexOf(t)+side+o.length)%o.length]; ST.fx={k:"wheel",side,id:Date.now()}; ST.msg+=` La roue (${side<0?"gauche":"droite"}) touche ${nm(v)}.`}
   kill(v,"tir du chasseur"); ST.hunter=null; await after(G.next);
 }
 async function flush(){const q=G.q; G.q=[];
@@ -634,6 +647,7 @@ function makePdf(){
   d.save("journal-loup-garou.pdf");
 }
 // ---------- Vocal (WebRTC, signalisation via Firestore) ----------
+let lk=null, lastMic=null;
 let micStream=null, peers={}, voiceOn=false, myT=0, vunsubs=[];
 const ICE={iceServers:[{urls:"stun:stun.l.google.com:19302"}]};
 function canSpeak(){
@@ -643,11 +657,27 @@ function canSpeak(){
   return !ST.silent&&!(ST.mute||[]).includes(me.uid)&&!(ST.mutedU||[]).includes(me.uid);
 }
 function applyMute(){
-  if(!micStream) return; const ok=canSpeak();
-  micStream.getAudioTracks().forEach(t=>t.enabled=ok);
+  const ok=canSpeak();
+  if(lk){if(lastMic!==ok){lastMic=ok; lk.localParticipant.setMicrophoneEnabled(ok).catch(()=>{})}}
+  else if(micStream) micStream.getAudioTracks().forEach(t=>t.enabled=ok);
+  else return;
   $("v-state").textContent=ok?"Micro ouvert":"Micro coupé";
 }
+async function joinVoiceLK(){
+  try{
+    if(!window.LivekitClient) await new Promise((ok,ko)=>{const sc=document.createElement("script"); sc.src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.0/dist/livekit-client.umd.js"; sc.onload=ok; sc.onerror=ko; document.head.append(sc)});
+    const L=window.LivekitClient;
+    const r=await fetch(`${LIVEKIT.tokenUrl}?room=${encodeURIComponent(roomCode)}&identity=${encodeURIComponent(me.uid)}&name=${encodeURIComponent(profile.name)}`);
+    const {token}=await r.json();
+    lk=new L.Room({audioCaptureDefaults:{echoCancellation:true,noiseSuppression:true}});
+    lk.on(L.RoomEvent.TrackSubscribed,t=>{if(t.kind==="audio"){const el=t.attach(); el.className="v"; document.body.append(el)}});
+    lk.on(L.RoomEvent.TrackUnsubscribed,t=>t.detach().forEach(el=>el.remove()));
+    await lk.connect(LIVEKIT.url,token); await lk.startAudio();
+    voiceOn=true; lastMic=null; $("b-voice").textContent="Couper le vocal"; applyMute();
+  }catch(e){console.error(e); lk=null; fail({message:"Vocal LiveKit indisponible (vérifie l’URL et le serveur de jetons)."})}
+}
 async function joinVoice(){
+  if(LIVEKIT.url&&LIVEKIT.tokenUrl) return joinVoiceLK();
   try{micStream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){return fail({message:"Micro refusé ou indisponible."})}
   voiceOn=true; myT=Date.now(); $("b-voice").textContent="Couper le vocal"; applyMute();
   await setDoc(doc(db,"rooms",roomCode,"rtcp",me.uid),{t:myT});
@@ -674,6 +704,7 @@ function connect(other,otherT){
     await setDoc(ref,{offer:JSON.stringify(o),for:otherT,oid,answer:null,aoid:null,candA:[],candB:[]}); ready=true; buf.forEach(sendC)});
 }
 async function closeVoice(){
+  if(lk){lk.disconnect(); lk=null} lastMic=null;
   vunsubs.forEach(u=>u()); vunsubs=[]; Object.values(peers).forEach(x=>x.pc.close()); peers={};
   document.querySelectorAll("audio.v").forEach(el=>el.remove()); micStream?.getTracks().forEach(t=>t.stop()); micStream=null;
   if(voiceOn&&roomCode) await deleteDoc(doc(db,"rooms",roomCode,"rtcp",me.uid)).catch(()=>{});
@@ -725,6 +756,29 @@ setInterval(async()=>{
       }}catch(e){console.error(e)}
   }
 },15000);
+let lastPh="", lastFx=0, lastDead=-1, sound=true, actx;
+const SND={night:[[196,.35],[147,.5]],day:[[392,.2],[523,.2],[659,.35]],death:[[330,.25],[262,.25],[196,.5]],vote:[[440,.12],[440,.12]],coin:[[880,.08],[1100,.08],[880,.08],[1100,.2]]};
+function beep(seq){
+  if(!sound) return;
+  try{actx=actx||new AudioContext(); let t=actx.currentTime;
+    seq.forEach(([f,d])=>{const o=actx.createOscillator(), g=actx.createGain(); o.frequency.value=f; g.gain.setValueAtTime(.12,t); g.gain.exponentialRampToValueAtTime(.001,t+d); o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t+d); t+=d})}catch(e){}
+}
+function banner(h,snd){
+  const el=$("fx"); el.innerHTML=h; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+  setTimeout(()=>el.classList.remove("show"),2300); if(snd) beep(SND[snd]);
+}
+function effects(){
+  if(ST.phase!==lastPh){
+    if(ST.phase==="night") banner("🌙<small>La nuit tombe</small>","night");
+    else if(ST.phase==="day"&&lastPh) banner("☀️<small>Le jour se lève</small>","day");
+    else if(ST.phase==="vote") beep(SND.vote);
+    lastPh=ST.phase}
+  if(lastDead>=0&&ST.dead.length>lastDead) beep(SND.death); lastDead=ST.dead.length;
+  const f=ST.fx; if(f&&f.id!==lastFx){const fresh=Date.now()-f.id<5000; lastFx=f.id;
+    if(fresh) banner(f.k==="coin"?`<span class="spin">🪙</span><small>${f.good?"Bon chasseur":"Mauvais chasseur"}${f.miss?" : tir raté":""}</small>`
+      :`<span class="spin">🎡</span><small>${f.side<0?"⬅️ Gauche":"Droite ➡️"}</small>`,"coin")}
+}
+$("b-snd").onclick=()=>{sound=!sound; $("b-snd").textContent=sound?"🔊":"🔇"};
 const replay=()=>updateDoc(doc(db,"rooms",roomCode),{status:"lobby"}).catch(fail);
 async function backToLobby(){
   const c=roomCode; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={}; IGM=false; applyMute(); // le vocal reste actif entre deux parties
