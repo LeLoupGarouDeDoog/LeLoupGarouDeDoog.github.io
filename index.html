@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Loup-Garou de DoogBarrow</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Almendra:wght@700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#1c2536;--panel:#273550;--ink:#ece9f6;--mute:#9aa6c0;--moon:#f2c94c;--wolf:#c8463c;--ok:#4caf7a;color-scheme:dark}
@@ -34,6 +35,8 @@ canvas{background:#fff;border-radius:50%;touch-action:none;width:160px;height:16
 #g-table{position:relative;width:100%;max-width:360px;aspect-ratio:1;margin:0 auto}
 #g-table .p img{width:52px;height:52px}
 .card{border-left:8px solid var(--mute);padding-left:14px}
+#voice{position:fixed;right:12px;bottom:12px;background:var(--panel);padding:8px 12px;border-radius:12px;display:flex;gap:8px;align-items:center;font-size:.85rem;z-index:5}
+#voice.hidden{display:none}
 footer{text-align:center;color:var(--mute);padding:8px 16px 32px;font-size:.9rem}
 footer a{color:var(--moon)}
 </style>
@@ -109,9 +112,10 @@ footer a{color:var(--moon)}
   <div class="panel" id="g-role"><p>Distribution des rôles en cours…</p></div>
   <div class="panel hidden" id="g-act"></div>
   <div class="panel hidden" id="g-gm"><h2>Vue du Maître du jeu</h2><div id="g-ctl"></div><h2>Rôles</h2><div id="g-all"></div></div>
-  <button class="alt" id="b-leave2">Quitter</button>
+  <div class="row"><button class="alt" id="b-leave2">Quitter</button><button id="b-replay" class="hidden">Rejouer</button></div>
 </section>
 </main>
+<div id="voice" class="hidden"><button id="b-voice" type="button">Activer le vocal</button><span id="v-state"></span></div>
 <footer>Idée de <a href="https://www.twitch.tv/doogbarrow" target="_blank" rel="noopener">DoogBarrow</a> et créé par <a href="https://www.twitch.tv/crackersmc_" target="_blank" rel="noopener">CrackersMc</a></footer>
 
 <script type="module">
@@ -128,12 +132,12 @@ const firebaseConfig = {
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithPopup,GoogleAuthProvider,signInAnonymously}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,doc,setDoc,getDoc,deleteDoc,collection,onSnapshot,query,where,serverTimestamp,updateDoc,increment,getDocs}
+import {getFirestore,doc,setDoc,getDoc,deleteDoc,collection,onSnapshot,query,where,serverTimestamp,updateDoc,increment,getDocs,arrayUnion}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
 const $=id=>document.getElementById(id);
-const show=id=>["s-login","s-profile","s-home","s-lobby","s-game"].forEach(s=>$(s).classList.toggle("hidden",s!==id));
+const show=id=>{["s-login","s-profile","s-home","s-lobby","s-game"].forEach(s=>$(s).classList.toggle("hidden",s!==id)); $("voice").classList.toggle("hidden",!["s-lobby","s-game"].includes(id))};
 const fail=e=>{$("err").textContent=e.message||String(e)};
 let me=null, profile=null, roomCode=null, unsubs=[];
 const MAX_PLAYERS=12;
@@ -194,6 +198,7 @@ async function joinRoom(code){
   const room=await getDoc(doc(db,"rooms",code));
   if(!room.exists()) return fail({message:"Code inconnu."});
   if(room.data().status!=="lobby") return fail({message:"La partie a déjà commencé."});
+  if(room.data().banned?.includes(me.uid)) return fail({message:"Tu as été expulsé de cette room."});
   const pref=doc(db,"rooms",code,"players",me.uid);
   const pv=await getDoc(pref), already=pv.exists();
   roomCode=code;
@@ -203,21 +208,18 @@ async function joinRoom(code){
   }catch(e){roomCode=null; return fail(e)}
   $("err").textContent=""; show("s-lobby");
   $("l-vis").textContent=room.data().public?"(publique)":"(privée)";
-  $("l-host").classList.toggle("hidden",room.data().hostUid!==me.uid);
+  hostUid=room.data().hostUid; cfgLoaded=false; $("l-host").classList.add("hidden");
   unsubs.forEach(u=>u()); unsubs=[];
   unsubs.push(onSnapshot(collection(db,"rooms",code,"players"),s=>renderLobby(s.docs.map(d=>({id:d.id,...d.data()})))));
   unsubs.push(onSnapshot(doc(db,"rooms",code),d=>{if(!d.exists())return; const st=d.data().status; if(st==="playing")enterGame(); else if(st==="lobby"&&started)backToLobby()}));
-  if(room.data().hostUid===me.uid){
-    const c=await getDoc(doc(db,"rooms",code,"private","config"));
-    if(c.exists()) cfg=c.data(); else await saveCfg();
-    renderHost();
-  }
 }
 function renderLobby(list){
+  if(roomCode&&!list.some(p=>p.id===me.uid)) return kicked();
   const gm=list.filter(p=>p.role==="gm"), pl=list.filter(p=>p.role==="player");
-  $("l-players").innerHTML=list.map(p=>`<div class="p ${p.role}"><img src="${p.avatar}" alt=""><div>${p.name.replace(/</g,"&lt;")}${p.role==="gm"?"<br>MJ":""}</div></div>`).join("");
+  $("l-players").innerHTML=list.map(p=>`<div class="p ${p.role}"><img src="${p.avatar}" alt=""><div>${p.name.replace(/</g,"&lt;")}${p.role==="gm"?"<br>MJ":""}</div>${isHost()&&p.id!==me.uid?`<button class="alt" data-kick="${p.id}">Expulser</button>`:""}</div>`).join("");
   $("l-count").textContent=`${pl.length}/${MAX_PLAYERS} joueurs, ${gm.length}/1 maître du jeu`;
-  players=list; plCount=pl.length; gmCount=gm.length; refreshStart(); if(started) drawTable();
+  players=list; plCount=pl.length; gmCount=gm.length; amGm=list.find(p=>p.id===me.uid)?.role==="gm";
+  const panel=isHost()||amGm; $("l-host").classList.toggle("hidden",!panel); if(panel) ensureCfg(); refreshStart(); if(started) drawTable();
   const mine=list.find(p=>p.id===me.uid);
   $("b-role-gm").disabled=gm.length>=1&&mine?.role!=="gm";
   $("b-role-p").disabled=pl.length>=MAX_PLAYERS&&mine?.role!=="player";
@@ -227,7 +229,7 @@ $("b-role-p").onclick=()=>setRole("player");
 $("b-role-gm").onclick=()=>setRole("gm");
 async function leaveRoom(){
   if(!roomCode) return;
-  const code=roomCode, ref=doc(db,"rooms",code); roomCode=null; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={};
+  await closeVoice(); const code=roomCode, ref=doc(db,"rooms",code); roomCode=null; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={};
   unsubs.forEach(u=>u()); unsubs=[];
   try{
     await deleteDoc(doc(db,"rooms",code,"players",me.uid));
@@ -273,20 +275,22 @@ const ROLES=[
  ["loupprot","Loup Protecteur","wolf","Chaque nuit, il protège un joueur du vote du lendemain.",1],
  ["loupbav","Loup Bavard","wolf","Doit dire le mot du jour choisi par le MJ, sinon il meurt.",1],
  ["angedechu","Ange déchu","solo","Désigne une cible qui doit mourir au premier tour. Sinon, il devient Villageois.",1],
- ["angegardien","Ange gardien","solo","Protège une cible toute la partie. Si elle survit, il gagne avec le camp vainqueur.",1]];
+ ["angegardien","Ange gardien","solo","Protège une cible toute la partie. Si elle survit, il gagne avec le camp vainqueur.",1],
+ ["mask","The Mask","solo","Chaque nuit, il réduit deux joueurs au silence pour la journée. Une fois, son marteau d’une tonne élimine quelqu’un.",1]];
 const isW=r=>["loup","loupranc","infect","loupcur","loupprot","loupbav"].includes(r);
 const isWU=u=>isW(G.roles[u])||G.infected.includes(u);
 const COLORS={wolf:"#c8463c",village:"#4caf7a",switch:"#f2c94c",solo:"#f28c28"};
-const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut (bientôt)"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée (bientôt)"],["canicule","Canicule"]];
+const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée (bientôt)"],["canicule","Canicule"]];
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let cfg={roles:{loup:1,villageois:1},scen:[]}, players=[], plCount=0, gmCount=0, started=false;
 const total=()=>Object.values(cfg.roles).reduce((a,b)=>a+b,0);
-const isHost=()=>!$("l-host").classList.contains("hidden");
+let hostUid=null, amGm=false, cfgLoaded=false;
+const isHost=()=>!!me&&hostUid===me.uid;
 const saveCfg=()=>setDoc(doc(db,"rooms",roomCode,"private","config"),cfg).catch(fail);
 
 function refreshStart(){
   $("h-total").textContent=`${total()} rôles pour ${plCount} joueurs`+(total()===plCount?" : parfait.":" : le nombre doit être identique.");
-  $("b-start").disabled=!(isHost()&&gmCount===1&&plCount>=1&&total()===plCount);
+  $("b-start").disabled=!((isHost()||amGm)&&gmCount===1&&plCount>=1&&total()===plCount);
 }
 function renderHost(){
   $("h-roles").innerHTML=ROLES.map(r=>`<div class="room"><span style="color:${COLORS[r[2]]}">${r[1]}</span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`).join("");
@@ -303,7 +307,9 @@ $("l-host").onchange=e=>{
   cfg.scen=e.target.checked?[...cfg.scen,k]:cfg.scen.filter(x=>x!==k); saveCfg();
 };
 $("b-start").onclick=()=>updateDoc(doc(db,"rooms",roomCode),{status:"playing"}).catch(fail);
-$("b-leave2").onclick=$("b-leave").onclick;
+$("b-leave2").onclick=$("b-leave").onclick; $("b-replay").onclick=()=>replay(); $("b-voice").onclick=()=>voiceOn?closeVoice():joinVoice();
+$("l-players").onclick=async e=>{const b=e.target.closest("[data-kick]"); if(!b||!isHost()) return;
+  try{await deleteDoc(doc(db,"rooms",roomCode,"players",b.dataset.kick)); await updateDoc(doc(db,"rooms",roomCode),{count:increment(-1),banned:arrayUnion(b.dataset.kick)})}catch(err){fail(err)}};
 
 function enterGame(){
   if(started) return; started=true; show("s-game"); drawTable();
@@ -333,10 +339,11 @@ async function deal(){
     await Promise.all(pl.map((p,i)=>setDoc(doc(db,"rooms",code,"secret",p.id),
       {role:deck[i],name:p.name,mates:isW(deck[i])?wolves.filter(n=>n!==p.name):[]})));
     G={roles:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]])),couple:null,life:true,poison:true,protect:null,victim:null,poisoned:null,
-       steps:[],done:{},hunters:[],log:[],hidden:c.scen.includes("cache"),scen:c.scen,voteId:Date.now(),voteN:0,infected:[],conv:[],q:[],charmed:[],oiled:[],burn:[],shield:null,master:null,child:null,ange:null,foxLost:false,infectLeft:1,shuffle:false,word:"",muted:[],next:"day",rabbitLeft:3,dictLeft:1,rabbitHide:null,coup:null,alpha:null,lie:false,mayor:null};
-    ST={phase:"night",turn:1,alive:Object.fromEntries(pl.map(p=>[p.id,true])),dead:[],wake:null,wakeId:Date.now(),pub:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]]).filter(x=>x[1]==="villageoisv")),hunter:null,vote:null,winner:null,final:null,
+       steps:[],done:{},hunters:[],log:[],hidden:c.scen.includes("cache"),scen:c.scen,voteId:Date.now(),voteN:0,infected:[],conv:[],q:[],charmed:[],oiled:[],burn:[],shield:null,master:null,child:null,ange:null,foxLost:false,hammerLeft:1,maskMute:[],hammered:null,infectLeft:1,shuffle:false,word:"",muted:[],next:"day",rabbitLeft:3,dictLeft:1,rabbitHide:null,coup:null,alpha:null,lie:false,mayor:null};
+    ST={phase:"night",turn:1,alive:Object.fromEntries(pl.map(p=>[p.id,true])),dead:[],wake:null,wakeId:Date.now(),mute:[],silent:false,pub:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]]).filter(x=>x[1]==="villageoisv")),hunter:null,vote:null,winner:null,final:null,
         msg:"La nuit tombe. Le MJ réveille les rôles un par un."};
     (await getDocs(collection(db,"rooms",code,"secret"))).docs.filter(d=>!G.roles[d.id]).forEach(d=>deleteDoc(d.ref));
+    G.log.push("Scénarios : "+(c.scen.join(", ")||"aucun")); pl.forEach((p,i)=>G.log.push(`${p.name} : ${rn(deck[i])}`));
     startNight(); await push();
   }catch(e){fail(e)}
 }
@@ -360,6 +367,7 @@ function render(){
   $("g-title").textContent={night:"La nuit tombe sur le village",day:"Le jour se lève",vote:"Le village vote",hunter:"Le chasseur tire",curieux:"Le Loup Curieux enquête",over:"Partie terminée"}[ST.phase]||"";
   $("g-msg").textContent=ST.msg+(ST.winner?" Victoire : "+ST.winner+".":"");
   drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
+  $("b-replay").classList.toggle("hidden",!(isHost()&&ST.phase==="over")); applyMute();
 }
 function drawTable(){
   const pl=players.filter(p=>p.role==="player");
@@ -376,7 +384,7 @@ function renderAct(){
   const el=$("g-act"); if(IGM||!mySecret){el.classList.add("hidden");return}
   if(lastKey!==key()){lastKey=key();sel=[];saveW=false}
   const wr=ST.wake?.role, r=(wr==="loup"&&(mySecret.wolfx||isW(mySecret.role)))?"loup":mySecret.role, ok=()=>sent===key(), others=alive().filter(u=>u!==me.uid); let h="";
-  if(ST.phase==="over") h="La partie est terminée."+(isHost()?`<div class="row"><button data-a="replay">Rejouer</button></div>`:"");
+  if(ST.phase==="over") h="La partie est terminée.";
   else if(ST.phase==="hunter"&&ST.hunter.uid===me.uid) h=ok()?"Tir envoyé.":`<p>Tu es un <b>${ST.hunter.good?"bon":"mauvais"} chasseur</b>${ST.hunter.good?"":" : la roue peut dévier ton tir"}. Choisis ta cible :</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Tirer</button>`;
   else if(ST.phase==="curieux"&&ST.cur.uid===me.uid) h=ok()?"Choix envoyé.":`<p>Choisis un électeur dont découvrir le rôle :</p><div class="row">${ST.cur.opts.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Valider</button>`;
   else if(!ST.alive[me.uid]) h="Tu es mort(e). Tu observes la partie en silence.";
@@ -389,6 +397,7 @@ function renderAct(){
         
         :r==="infect"?`<p>Victime des Loups : <b>${esc(ab?.victim||"aucune")}</b>. Infections restantes : ${ab?.left}</p>${ab?.left>0&&ab?.victim?`<button class="${saveW?"":"alt"}" data-save="1">Infecter cette victime</button> `:""}<button data-ok="1">Confirmer</button>`
         :r==="pyro"?`<p>Huile jusqu’à 2 joueurs, ou embrase ceux déjà huilés :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button class="${saveW?"":"alt"}" data-save="1">Embraser</button> <button data-ok="1">Confirmer</button>`
+        :r==="mask"?`<p>Réduis deux joueurs au silence demain. Marteau restant : ${ab?.left}</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div>${ab?.left>0?`<button class="${saveW?"":"alt"}" data-save="1">Marteau : éliminer le 1er joueur choisi</button> `:""}<button data-ok="1" ${sel.length?"":"disabled"}>Confirmer</button>`
         :r==="flute"?`<p>Charme 2 joueurs :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Confirmer</button>`
         :r==="lapin"?`<p>Cachettes restantes : ${ab?.left}</p>${ab?.left>0?`<button class="${saveW?"":"alt"}" data-save="1">Se cacher cette nuit</button> `:""}<button data-ok="1">Confirmer</button>`
         :r==="dictateur"?`<p>Coups d’État restants : ${ab?.left}</p><button class="${saveW?"":"alt"}" data-save="1">Faire un coup d’État</button><p>Cible :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${!saveW||sel.length?"":"disabled"}>Confirmer</button>`
@@ -411,10 +420,10 @@ $("g-act").onclick=async e=>{
 
 // --- Côté MJ ---
 const acts=r=>holders(r).map(u=>ACT[u]).filter(a=>a&&a.wakeId===ST.wakeId);
-const maxOf=s=>s==="cupidon"?(G.scen.includes("trouple")?3:2):s==="detective"||s==="flute"||s==="pyro"?2:1;
+const maxOf=s=>s==="cupidon"?(G.scen.includes("trouple")?3:2):s==="detective"||s==="flute"||s==="pyro"||s==="mask"?2:1;
 function ready(s){
   const a=acts(s), n=holders(s).length; if(a.length<n) return false;
-  if(["sorciere","lapin","dictateur","infect","pyro","flute"].includes(s)) return true;
+  if(["sorciere","lapin","dictateur","infect","pyro","flute","mask"].includes(s)) return true;
   return a.every(x=>x.targets.length===maxOf(s)&&x.targets.join()===a[0].targets.join());
 }
 function renderGM(){
@@ -428,23 +437,23 @@ function renderGM(){
   else if(ph==="hunter"){const a=ACT[ST.hunter.uid]; h=`<p>Chasseur : ${nm(ST.hunter.uid)} (${ST.hunter.good?"bon":"mauvais"}). ${a?.wakeId===ST.wakeId?"Cible : "+nm(a.targets[0]):"Il choisit…"}</p><button data-a="hunt" ${a?.wakeId===ST.wakeId?"":"disabled"}>Valider le tir</button>`}
   if(ph==="night"&&Object.values(G.roles).includes("pronostiqueur")) h+=`<label class="room"><span>Le Pronostiqueur ment</span><input type="checkbox" id="lie" style="width:auto" ${G.lie?"checked":""}></label>`;
   if(ph==="curieux"){const a=ACT[ST.cur.uid], ok=a?.wakeId===ST.wakeId; h=`<p>Loup Curieux : ${ok?"choix "+nm(a.targets[0]):"il choisit…"}</p><button data-a="cur" ${ok?"":"disabled"}>Valider</button>`}
-  if(ph==="over") h=isHost()?`<button data-a="replay">Rejouer</button>`:"Partie terminée.";
+  if(ph==="over") h=`<button data-a="pdf">Télécharger le journal (PDF)</button>`;
   if(ph==="day"&&alive().some(u=>G.roles[u]==="loupbav")) h+=`<div class="row"><input id="word" placeholder="Mot du jour du Loup Bavard" value="${esc(G.word)}"><button data-a="word">Envoyer</button><button class="alt" data-a="forgot">Il a oublié : il meurt</button></div>`;
   $("g-ctl").innerHTML=h;
 }
 async function gmClick(e){
   const b=e.target.closest("button[data-a]"); if(!b) return; const a=b.dataset.a, s=b.dataset.s;
-  try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="close")await closeVote(); if(a==="hunt")await resolveHunter(); if(a==="cur")await resolveCurieux(); if(a==="replay")await replay();
+  try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="close")await closeVote(); if(a==="hunt")await resolveHunter(); if(a==="cur")await resolveCurieux(); if(a==="pdf")makePdf();
     if(a==="word"||a==="forgot"){const bv=alive().find(u=>G.roles[u]==="loupbav");
       if(a==="word"){G.word=$("word").value; await updateDoc(sd(bv),{info:"Mot du jour à dire : "+G.word})}
       else{ST.msg=`${nm(bv)} a oublié le mot et meurt.`; kill(bv,"a oublié le mot"); await after("day")}} }catch(err){fail(err)}
 }
-function startNight(){G.shield=null; const t1=ST.turn===1;
-  G.steps=["cupidon","enfant","angedechu","angegardien","detective","voyante","renard","pronostiqueur","savant","salvateur","lapin","dictateur","flute","pyro","loupprot","loup","infect","sorciere"]
+function startNight(){G.shield=null; G.log.push("— Nuit "+ST.turn+" —"); const t1=ST.turn===1;
+  G.steps=["cupidon","enfant","angedechu","angegardien","detective","voyante","renard","pronostiqueur","savant","salvateur","lapin","dictateur","flute","pyro","mask","loupprot","loup","infect","sorciere"]
   .filter(s=>(!["cupidon","enfant","angedechu","angegardien"].includes(s)||t1)&&(s!=="lapin"||G.rabbitLeft>0)&&(s!=="dictateur"||(G.dictLeft>0&&!G.coup))&&(s!=="infect"||G.infectLeft>0)&&holders(s).length); G.done={}}
 async function wake(s){
   if(s==="sorciere") await updateDoc(doc(db,"rooms",roomCode,"secret",holders(s)[0]),{witch:{victim:G.victim?nm(G.victim):null,life:G.life,poison:G.poison}});
-  if(["lapin","dictateur","infect"].includes(s)) await updateDoc(sd(holders(s)[0]),{ability:{left:s==="lapin"?G.rabbitLeft:s==="dictateur"?G.dictLeft:G.infectLeft,victim:G.victim?nm(G.victim):null}});
+  if(["lapin","dictateur","infect","mask"].includes(s)) await updateDoc(sd(holders(s)[0]),{ability:{left:s==="lapin"?G.rabbitLeft:s==="dictateur"?G.dictLeft:s==="mask"?G.hammerLeft:G.infectLeft,victim:G.victim?nm(G.victim):null}});
   ST.wakeId++; ST.wake={role:s,max:maxOf(s)}; await push();
 }
 async function endStep(s){
@@ -479,6 +488,8 @@ async function endStep(s){
   if(s==="loupprot"){G.shield=t[0]; G.log.push(`Loup Protecteur protège ${nm(t[0])} du vote`);}
   if(s==="infect"&&a[0].save&&G.infectLeft>0&&G.victim){const v=G.victim; G.infectLeft--; G.infected.push(v); G.victim=null; G.log.push(`Infect Père des Loups infecte ${nm(v)}`);
     G.q.push([v,{wolfx:true,info:"Tu as été infecté : tu rejoins les Loups, en gardant ton pouvoir !"}]);}
+  if(s==="mask"){if(a[0].save&&G.hammerLeft>0&&t[0]){G.hammerLeft--; G.hammered=t[0]; G.log.push("The Mask abat son marteau sur "+nm(t[0]))}
+    else{G.maskMute=t; G.log.push("The Mask réduit au silence "+t.map(nm).join(", "))}}
   await flush();
   G.done[s]=true; ST.wake=null; await push();
 }
@@ -513,20 +524,22 @@ async function after(next){
   const w=winner();
   if(w){ST.phase="over"; ST.winner=w+((G.ange?.kind==="gardien"&&ST.alive[G.ange.t])?" et l’Ange gardien":""); ST.final=G.roles; G.log.push("Victoire : "+w); await push(); return}
   if(next==="night"&&G.scen.includes("canicule")&&ST.turn>=6){alive().forEach(u=>kill(u,"canicule")); ST.phase="over"; ST.winner="personne (canicule)"; ST.final=G.roles; await push(); return}
-  if(next==="night"){G.victim=G.poisoned=G.protect=G.rabbitHide=null; ST.turn++; ST.phase="night"; ST.wake=null; ST.vote=null; ST.msg=`Nuit ${ST.turn}.`;
+  if(next==="night"){G.victim=G.poisoned=G.protect=G.rabbitHide=null; ST.mute=[]; ST.silent=false; ST.turn++; ST.phase="night"; ST.wake=null; ST.vote=null; ST.msg=`Nuit ${ST.turn}.`;
     const ws=alive().filter(isWU);
     if(G.scen.includes("alpha")&&ST.turn===3&&!G.alpha&&ws.length){G.alpha=ws[Math.random()*ws.length|0]; G.log.push("Loup Alpha : "+nm(G.alpha)); await updateDoc(doc(db,"rooms",roomCode,"secret",G.alpha),{info:"Tu es le Loup Alpha : tu gagnes seul en éliminant tout le monde."})}
     startNight()}
-  else{ST.phase="day"; ST.wake=null}
+  else{ST.phase="day"; ST.wake=null; ST.silent=G.scen.includes("chut")&&ST.turn%2===0; if(ST.silent&&!ST.msg.includes("silencieux")) ST.msg+=" Jour silencieux : personne ne parle."}
   await push();
 }
 async function dawn(){
-  const before=alive();
+  const before=alive(); G.log.push("— Jour "+ST.turn+" —");
   if(G.victim&&G.victim!==G.protect&&G.victim!==G.rabbitHide) kill(G.victim,"attaqué par les Loups");
   if(G.poisoned&&G.poisoned!==G.rabbitHide) kill(G.poisoned,"empoisonné");
   G.burn.forEach(u=>kill(u,"brûlé par le Pyromane")); G.burn=[];
+  if(G.hammered){kill(G.hammered,"marteau de The Mask"); G.hammered=null}
   const d=before.filter(u=>!ST.alive[u]);
   ST.msg=d.length?"Cette nuit, sont morts : "+d.map(nm).join(", ")+".":"Personne n'est mort cette nuit.";
+  ST.mute=G.maskMute.filter(u=>ST.alive[u]); G.maskMute=[]; if(ST.mute.length) ST.msg+=` The Mask réduit au silence : ${ST.mute.map(nm).join(", ")}.`;
   const bear=alive().find(u=>G.roles[u]==="ours"); if(bear) ST.msg+=` L’ours grogne ${nbs(bear).filter(u=>u!==bear&&isWU(u)).length} fois.`;
   await after("day");
 }
@@ -581,9 +594,70 @@ async function resolveCurieux(){
   await updateDoc(sd(ST.cur.uid),{info:`${nm(t)} est ${rn(G.roles[t])}.`}); G.log.push(`Loup Curieux découvre le rôle de ${nm(t)}`);
   ST.cur=null; await after(G.next);
 }
+function makePdf(){
+  const {jsPDF}=window.jspdf, d=new jsPDF(); let y=20;
+  d.setFontSize(16); d.text("Loup-Garou de DoogBarrow : journal de partie",15,y); y+=10; d.setFontSize(10);
+  [`Date : ${new Date().toLocaleString("fr-FR")}`,`Vainqueur : ${ST.winner}`,"",...G.log].forEach(l=>
+    d.splitTextToSize(l,180).forEach(t=>{if(y>280){d.addPage();y=20} d.text(t,15,y); y+=6}));
+  d.save("journal-loup-garou.pdf");
+}
+// ---------- Vocal (WebRTC, signalisation via Firestore) ----------
+let micStream=null, peers={}, voiceOn=false, myT=0, vunsubs=[];
+const ICE={iceServers:[{urls:"stun:stun.l.google.com:19302"}]};
+function canSpeak(){
+  if(!ST||IGM) return true;
+  if(!ST.alive[me.uid]) return false;
+  if(ST.phase==="night") return false;
+  return !ST.silent&&!(ST.mute||[]).includes(me.uid);
+}
+function applyMute(){
+  if(!micStream) return; const ok=canSpeak();
+  micStream.getAudioTracks().forEach(t=>t.enabled=ok);
+  $("v-state").textContent=ok?"Micro ouvert":"Micro coupé";
+}
+async function joinVoice(){
+  try{micStream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){return fail({message:"Micro refusé ou indisponible."})}
+  voiceOn=true; myT=Date.now(); $("b-voice").textContent="Couper le vocal"; applyMute();
+  await setDoc(doc(db,"rooms",roomCode,"rtcp",me.uid),{t:myT});
+  vunsubs.push(onSnapshot(collection(db,"rooms",roomCode,"rtcp"),q=>q.docs.forEach(d=>{
+    if(d.id===me.uid) return; const t=d.data().t; if(peers[d.id]?.t===t) return;
+    peers[d.id]?.pc.close(); connect(d.id,t)})));
+}
+function connect(other,otherT){
+  const a=me.uid<other, ref=doc(db,"rooms",roomCode,"rtc",a?me.uid+"_"+other:other+"_"+me.uid);
+  const pc=new RTCPeerConnection(ICE), oid=Math.random().toString(36).slice(2); peers[other]={pc,t:otherT};
+  micStream.getTracks().forEach(t=>pc.addTrack(t,micStream));
+  pc.ontrack=e=>{const id="au-"+other; let el=$(id); if(!el){el=document.createElement("audio");el.id=id;el.className="v";el.autoplay=true;document.body.append(el)} el.srcObject=e.streams[0]};
+  const mine=a?"candA":"candB", theirs=a?"candB":"candA"; let seen=0, ready=!a, buf=[], handled="";
+  const sendC=c=>setDoc(ref,{[mine]:arrayUnion(JSON.stringify(c))},{merge:true});
+  pc.onicecandidate=e=>{if(!e.candidate) return; ready?sendC(e.candidate):buf.push(e.candidate)};
+  vunsubs.push(onSnapshot(ref,async d=>{const x=d.data(); if(!x) return;
+    try{
+      if(!a&&x.offer&&x.for===myT&&x.oid!==handled){handled=x.oid; await pc.setRemoteDescription(JSON.parse(x.offer));
+        const an=await pc.createAnswer(); await pc.setLocalDescription(an); await setDoc(ref,{answer:JSON.stringify(an),aoid:x.oid},{merge:true})}
+      if(a&&x.answer&&x.aoid===oid&&!pc.remoteDescription) await pc.setRemoteDescription(JSON.parse(x.answer));
+      if(pc.remoteDescription&&x[theirs]){x[theirs].slice(seen).forEach(c=>pc.addIceCandidate(JSON.parse(c)).catch(()=>{})); seen=x[theirs].length}
+    }catch(err){console.error(err)}}));
+  if(a) pc.createOffer().then(async o=>{await pc.setLocalDescription(o);
+    await setDoc(ref,{offer:JSON.stringify(o),for:otherT,oid,answer:null,aoid:null,candA:[],candB:[]}); ready=true; buf.forEach(sendC)});
+}
+async function closeVoice(){
+  vunsubs.forEach(u=>u()); vunsubs=[]; Object.values(peers).forEach(x=>x.pc.close()); peers={};
+  document.querySelectorAll("audio.v").forEach(el=>el.remove()); micStream?.getTracks().forEach(t=>t.stop()); micStream=null;
+  if(voiceOn&&roomCode) await deleteDoc(doc(db,"rooms",roomCode,"rtcp",me.uid)).catch(()=>{});
+  voiceOn=false; $("b-voice").textContent="Activer le vocal"; $("v-state").textContent="";
+}
+function ensureCfg(){
+  if(cfgLoaded) return; cfgLoaded=true;
+  unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"private","config"),d=>{if(d.exists()){cfg=d.data(); renderHost()} else saveCfg()},fail));
+}
+async function kicked(){
+  roomCode=null; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false;
+  await closeVoice(); goHome(); fail({message:"Tu as été expulsé de la room."});
+}
 const replay=()=>updateDoc(doc(db,"rooms",roomCode),{status:"lobby"}).catch(fail);
 async function backToLobby(){
-  const c=roomCode; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={}; IGM=false;
+  await closeVoice(); const c=roomCode; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={}; IGM=false;
   await joinRoom(c);
 }
 </script>
