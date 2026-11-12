@@ -130,8 +130,10 @@ $("b-google").onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(f
 $("b-anon").onclick=()=>signInAnonymously(auth).catch(fail);
 onAuthStateChanged(auth,async u=>{
   me=u; if(!u) return show("s-login");
-  const snap=await getDoc(doc(db,"users",u.uid));
-  if(snap.exists()){profile=snap.data(); goHome();} else show("s-profile");
+  try{
+    const snap=await getDoc(doc(db,"users",u.uid));
+    if(snap.exists()){profile=snap.data(); goHome();} else show("s-profile");
+  }catch(e){console.error(e); fail(e); show("s-profile");}
 });
 
 // ---------- Avatar façon Gartic Phone ----------
