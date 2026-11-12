@@ -280,38 +280,39 @@ $("b-copy").onclick=async()=>{
 
 // ---------- Étape 2 : réglages, distribution des rôles ----------
 const ROLES=[
- ["loup","Loup-Garou","wolf","Chaque nuit, la meute choisit une victime à l’unanimité.",12],
- ["villageois","Villageois","village","Aucun pouvoir. Il vote le jour.",12],
- ["voyante","Voyante","village","Chaque nuit, elle découvre le rôle d’un joueur.",1],
- ["sorciere","Sorcière","village","Une potion de vie et une potion de poison.",1],
- ["chasseur","Chasseur","village","À sa mort : pile ou face, tir éventuel, roue gauche/droite.",1],
- ["cupidon","Cupidon","switch","Lie deux joueurs par l’amour la première nuit.",1],
- ["salvateur","Salvateur","village","Protège un joueur des Loups chaque nuit.",1],
- ["petitefille","Petite fille","village","Se réveille avec les Loups, en restant discrète.",1],
- ["detective","Détective","village","Chaque nuit, il choisit deux joueurs : « Oui » s’ils sont du même camp, « Non » sinon.",1],
- ["pronostiqueur","Pronostiqueur","village","Chaque nuit, il désigne un joueur et reçoit « Gentil » ou « Méchant » (le MJ peut mentir).",1],
- ["lapin","Lapin","village","3 fois par partie, il se cache la nuit : immunisé contre les Loups et la Sorcière.",1],
- ["dictateur","Dictateur","switch","Une fois par partie, coup d’État : sa cible meurt à la place du vote. Un Loup : il devient Maire. Un Villageois : il meurt.",1],
- ["ange","Ange","solo","Il gagne s’il est éliminé au premier vote du village. Sinon, il devient Villageois.",1],
- ["bouffon","Bouffon","solo","Il gagne s’il est éliminé par le vote du village.",1],
- ["loupranc","Loup Rancunier","wolf","Se réveille avec les Loups. S’il est éliminé par le vote, il emporte un électeur avec lui.",1],
- ["villageoisv","Villageois villageois","village","Simple villageois, mais tout le monde connaît son rôle.",1],
- ["enfant","Enfant sauvage","switch","Choisit un maître la première nuit. Si le maître meurt, il devient Loup-Garou.",1],
- ["renard","Renard","village","Flaire un joueur et ses deux voisins : y a-t-il un Loup ? Sinon, il perd son pouvoir.",1],
- ["infect","Infect Père des Loups","wolf","Une fois, il infecte la victime des Loups : elle les rejoint en gardant son pouvoir.",1],
- ["flute","Joueur de flûte","solo","Charme 2 joueurs par nuit. Il gagne quand tous les vivants sont charmés.",1],
- ["ours","Montreur d’ours","village","Chaque matin, l’ours grogne une fois par Loup voisin du montreur.",1],
- ["pyro","Pyromane","solo","Huile 2 joueurs par nuit, puis les embrase quand il veut. Dernier survivant, il gagne.",1],
- ["trublion","Trublion","village","À sa mort, tous les rôles des vivants sont redistribués.",1],
- ["savant","Savant fou","village","Chaque nuit, il désigne un joueur : s’il est infecté ou Enfant sauvage transformé, il redevient Villageois et muet.",1],
- ["loupcur","Loup Curieux","wolf","Quand un Loup est éliminé par le vote, il découvre le rôle d’un de ses électeurs.",1],
- ["loupprot","Loup Protecteur","wolf","Chaque nuit, il protège un joueur du vote du lendemain.",1],
- ["loupbav","Loup Bavard","wolf","Doit dire le mot du jour choisi par le MJ, sinon il meurt.",1],
- ["angedechu","Ange déchu","solo","Désigne une cible qui doit mourir au premier tour. Sinon, il devient Villageois.",1],
- ["angegardien","Ange gardien","solo","Protège une cible toute la partie. Si elle survit, il gagne avec le camp vainqueur.",1],
- ["mask","The Mask","solo","Chaque nuit, il réduit deux joueurs au silence pour la journée. Une fois, son marteau d’une tonne élimine quelqu’un.",1]];
+ ["loup","Loup-Garou","wolf","Chaque nuit, tu te réveilles avec les autres Loups et vous choisissez ensemble une victime : vous devez tous désigner la même personne. Le jour, fais semblant d’être un simple villageois pour ne pas te faire éliminer.",12],
+ ["villageois","Villageois","village","Tu n’as aucun pouvoir spécial. Le jour, écoute les autres, débats et vote pour éliminer celui que tu soupçonnes d’être un Loup-Garou.",12],
+ ["voyante","Voyante","village","Chaque nuit, tu choisis un joueur et le site te révèle son rôle. Utilise ces infos pour guider le village, mais reste discrète : les Loups voudront te tuer.",1],
+ ["sorciere","Sorcière","village","Tu as deux potions, à usage unique. Potion de vie : sauve la victime des Loups. Potion de poison : tue le joueur de ton choix. Chaque nuit, tu vois qui les Loups ont visé et tu décides d’utiliser une potion ou non.",1],
+ ["chasseur","Chasseur","village","Quand tu meurs, tu as droit à un dernier tir, et c’est toi qui fais tourner les roues. Roue 1 : bon ou mauvais chasseur. Bon chasseur : ton tir touche la cible que tu choisis. Mauvais chasseur : roue 2 pour savoir si ton tir part ; s’il part, tu choisis une cible et la roue 3 décide si c’est son voisin de gauche ou de droite qui est touché.",1],
+ ["cupidon","Cupidon","switch","La première nuit, tu désignes deux joueurs (toi compris si tu veux) qui tombent amoureux. Ils se connaissent et gagnent ensemble : si l’un meurt, l’autre meurt de chagrin. Même dans des camps différents, leur but est de survivre tous les deux.",1],
+ ["salvateur","Salvateur","village","Chaque nuit, tu choisis un joueur à protéger (toi compris) : les Loups ne pourront pas le tuer cette nuit-là. Attention, cela ne le protège ni du poison ni du vote du village.",1],
+ ["petitefille","Petite fille","village","Pendant que les Loups choisissent leur victime, tu espionnes discrètement : tu vois qui ils évoquent, sans savoir qui parle. Utilise ces infos pour guider le village sans te faire repérer.",1],
+ ["detective","Détective","village","Chaque nuit, tu choisis deux joueurs et tu apprends s’ils sont dans le même camp (Oui) ou non (Non). Les camps sont : Villageois, Loups-Garous, ou solitaires.",1],
+ ["pronostiqueur","Pronostiqueur","village","Chaque nuit, tu désignes un joueur et tu apprends s’il est Gentil ou Méchant (les Loups sont Méchants). Attention : le Maître du jeu peut décider de te mentir pendant toute la partie, à toi de t’en méfier.",1],
+ ["lapin","Lapin","village","Tu peux te cacher 3 fois dans la partie, la nuit. Caché, tu es intouchable par les Loups et la Sorcière cette nuit-là. Garde tes cachettes pour les nuits où tu te sens menacé.",1],
+ ["dictateur","Dictateur","switch","Une seule fois, la nuit, tu peux préparer un coup d’État contre un joueur. Le lendemain, le vote est annulé et ta cible est éliminée tout de suite. Si c’était un Loup-Garou, tu deviens Maire : ta voix compte double pour tous les votes suivants (tant que tu es en vie). Si c’était un Villageois, tu meurs aussi. Risqué !",1],
+ ["ange","Ange","solo","Ton but est de te faire éliminer lors du tout premier vote du village : si tu y arrives, tu gagnes seul et la partie s’arrête. Sinon, tu deviens un simple villageois. Attire les soupçons dès le premier jour !",1],
+ ["bouffon","Bouffon","solo","Ton but est de te faire éliminer par le vote du village, à n’importe quel moment. Si tu réussis, tu gagnes seul. Joue le suspect, sans être trop évident !",1],
+ ["loupranc","Loup Rancunier","wolf","Tu es un Loup-Garou : tu te réveilles avec la meute. Si le village t’élimine par son vote, tu emportes avec toi une personne qui a voté contre toi, tirée au hasard.",1],
+ ["villageoisv","Villageois villageois","village","Tu es un simple villageois, mais ton rôle est révélé à tout le monde dès le début : tout le monde sait que tu es innocent. Aide le village à trouver les Loups.",1],
+ ["enfant","Enfant sauvage","switch","La première nuit, tu choisis un joueur comme maître. Tant qu’il est en vie, tu es un villageois. S’il meurt, tu deviens Loup-Garou et tu rejoins la meute (tu en es prévenu).",1],
+ ["renard","Renard","village","Chaque nuit, tu désignes un joueur : tu apprends s’il y a au moins un Loup parmi lui et ses deux voisins. Si oui, tu gardes ton pouvoir. Sinon, tu le perds définitivement.",1],
+ ["infect","Infect Père des Loups","wolf","Tu es un Loup-Garou et tu te réveilles avec la meute. Une seule fois, tu peux infecter la victime des Loups : elle ne meurt pas, mais rejoint les Loups en gardant son pouvoir.",1],
+ ["flute","Joueur de flûte","solo","Tu joues seul. Chaque nuit, tu charmes deux joueurs (jamais toi-même) ; les charmés se connaissent. Tu gagnes quand tous les joueurs encore en vie sont charmés.",1],
+ ["ours","Montreur d’ours","village","Chaque matin, l’ours grogne : une fois pour chaque Loup-Garou assis juste à côté de toi (à gauche ou à droite). Tout le monde entend les grognements, à toi de les utiliser pour repérer les suspects.",1],
+ ["pyro","Pyromane","solo","Tu joues seul. Chaque nuit, tu peux huiler jusqu’à deux joueurs, ou bien embraser tous les joueurs déjà huilés pour les éliminer d’un coup. Tu gagnes si tu es le dernier survivant.",1],
+ ["trublion","Trublion","village","Quand tu meurs, tous les rôles des joueurs encore en vie sont redistribués au hasard : chacun découvre alors son nouveau rôle. Les amoureux et les charmés restent les mêmes personnes.",1],
+ ["savant","Savant fou","village","Chaque nuit, tu désignes un joueur. S’il a été infecté (Infect Père des Loups) ou transformé en Loup (Enfant sauvage), il est guéri et redevient villageois, mais il ne peut plus parler pour le reste de la partie.",1],
+ ["loupcur","Loup Curieux","wolf","Tu es un Loup-Garou. Quand un Loup est éliminé par le vote du village, tu peux découvrir le rôle de l’un des joueurs qui ont voté contre lui.",1],
+ ["loupprot","Loup Protecteur","wolf","Tu es un Loup-Garou. Chaque nuit, tu protèges un joueur du vote du village : il ne pourra pas être éliminé le lendemain.",1],
+ ["loupbav","Loup Bavard","wolf","Tu es un Loup-Garou. Chaque jour, le Maître du jeu te donne un mot secret que tu dois glisser dans la conversation. Si tu l’oublies, tu meurs. Reste naturel pour ne pas te faire repérer !",1],
+ ["angedechu","Ange déchu","solo","La première nuit, tu choisis une cible qui doit mourir avant la fin du premier tour. Si elle meurt, tu gagnes seul. Sinon, tu deviens un simple villageois.",1],
+ ["angegardien","Ange gardien","solo","La première nuit, tu choisis une personne à protéger pendant toute la partie. Si elle est encore en vie à la fin, tu gagnes avec le camp vainqueur. Si elle meurt, tu ne gagnes pas.",1],
+ ["mask","The Mask","solo","Chaque nuit, tu réduis deux joueurs au silence pour la journée suivante. Une seule fois, tu peux à la place abattre ton marteau d’une tonne pour éliminer un joueur. Tu joues seul.",1]];
 const isW=r=>["loup","loupranc","infect","loupcur","loupprot","loupbav"].includes(r);
 const isWU=u=>isW(G.roles[u])||G.infected.includes(u);
+const CAMP={village:"Camp : Village. Ton but : éliminer tous les Loups-Garous.",wolf:"Camp : Loups-Garous. Ton but : éliminer les villageois, jusqu’à ce que les Loups soient aussi nombreux que les autres.",solo:"Camp : solitaire. Tu joues pour toi : lis bien ton objectif ci-dessus.",switch:"Ton camp peut changer pendant la partie : lis bien ta description."};
 const EMO={loup:"🐺",villageois:"🧑‍🌾",voyante:"🔮",sorciere:"🧪",chasseur:"🏹",cupidon:"💘",salvateur:"🛡️",petitefille:"👧",detective:"🕵️",pronostiqueur:"📈",lapin:"🐇",dictateur:"👑",ange:"😇",bouffon:"🤡",loupranc:"😡",villageoisv:"👨‍🌾",enfant:"🧒",renard:"🦊",infect:"☣️",flute:"🪈",ours:"🐻",pyro:"🔥",trublion:"🌀",savant:"🥼",loupcur:"🔍",loupprot:"🐾",loupbav:"🗣️",angedechu:"👼",angegardien:"🪽",mask:"🎭"};
 const COLORS={wolf:"#c8463c",village:"#4caf7a",switch:"#f2c94c",solo:"#f28c28"};
 const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée"],["canicule","Canicule"]];
@@ -328,7 +329,7 @@ function refreshStart(){
   $("b-start").disabled=!(amGm&&gmCount===1&&plCount>=1&&total()===plCount);
 }
 function renderHost(){
-  $("h-roles").innerHTML=ROLES.map(r=>`<div class="room"><span style="color:${COLORS[r[2]]}">${r[1]}</span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`).join("");
+  $("h-roles").innerHTML=ROLES.map(r=>`<div class="room"><span style="max-width:72%;color:${COLORS[r[2]]}">${EMO[r[0]]||""} ${r[1]}<br><small style="color:var(--mute)">${r[3]}</small></span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`).join("");
   $("h-scen").innerHTML=SCEN.map(c=>`<label class="room"><span>${c[1]}</span><input type="checkbox" style="width:auto" data-s="${c[0]}" ${cfg.scen.includes(c[0])?"checked":""}></label>`).join("");
   refreshStart();
 }
@@ -355,7 +356,7 @@ function enterGame(){
   unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"state","public"),d=>{if(d.exists()){ST=d.data();render()}}));
   if(gm){
     $("g-gm").classList.remove("hidden"); $("g-gm").onclick=gmClick; $("g-gm").onchange=e=>{if(e.target.id==="lie")G.lie=e.target.checked}; resumeOrDeal();
-    unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"actions"),q=>{ACT={};q.docs.forEach(x=>ACT[x.id]=x.data());render()}));
+    unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"actions"),q=>{ACT={};q.docs.forEach(x=>ACT[x.id]=x.data());render(); hunterAuto()}));
     unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"secret"),q=>{
       $("g-all").innerHTML=q.docs.map(d=>{const x=d.data(),r=ROLES.find(r=>r[0]===x.role);
         return `<div class="room"><span>${esc(x.name)}</span><b style="color:${COLORS[r[2]]}">${r[1]}</b></div>`}).join("");
@@ -393,7 +394,7 @@ const holders=r=>alive().filter(u=>r==="loup"?isWU(u):G.roles[u]===r);
 const sd=u=>doc(db,"rooms",roomCode,"secret",u);
 const nbs=u=>{const o=players.filter(p=>p.role==="player"&&ST.alive[p.id]).map(p=>p.id),i=o.indexOf(u);return[o[(i+o.length-1)%o.length],u,o[(i+1)%o.length]]};
 const push=()=>{const {q,...g}=G||{}; return Promise.all([setDoc(doc(db,"rooms",roomCode,"state","public"),ST),setDoc(doc(db,"rooms",roomCode,"private","game"),JSON.parse(JSON.stringify(g)))]).catch(fail)};
-const key=()=>ST.phase+"-"+ST.wakeId+"-"+(ST.vote?.id||0);
+const key=()=>ST.phase+"-"+ST.wakeId+"-"+(ST.vote?.id||0)+(ST.hunter?.stage||"");
 const btn=(u,extra="")=>`<button class="${sel.includes(u)||myVote?.t===u?"":"alt"}" ${extra}="${u}">${esc(nm(u))}</button>`;
 setInterval(()=>{const c=$("cd"); if(c&&ST?.vote) c.textContent=Math.max(0,Math.ceil((ST.vote.end-Date.now())/1000))+" s"},400);
 
@@ -408,24 +409,28 @@ function drawTable(){
   const pl=players.filter(p=>p.role==="player");
   $("g-table").innerHTML=pl.map((p,i)=>{const a=2*Math.PI*i/pl.length-Math.PI/2, d=ST?.dead.find(x=>x.uid===p.id);
     const r=d?.role||ST?.final?.[p.id]||ST?.pub?.[p.id];
-    return `<div class="p" style="position:absolute;left:${50+38*Math.cos(a)}%;top:${50+38*Math.sin(a)}%;transform:translate(-50%,-50%)"><img src="${p.avatar}" alt="" style="${d?"filter:grayscale(1);opacity:.5":""}"><div>${esc(p.name)}${ST?.mutedU?.includes(p.id)?" 🔇":""}${r?`<br><small>${EMO[r]||""} ${rn(r)}</small>`:""}</div></div>`}).join("");
+    return `<div class="p" style="position:absolute;left:${50+38*Math.cos(a)}%;top:${50+38*Math.sin(a)}%;transform:translate(-50%,-50%)"><img src="${p.avatar}" alt="" style="${d?"filter:grayscale(1);opacity:.5":""}"><div>${esc(p.name)}${ST?.mutedU?.includes(p.id)?" 🔇":""}${ST?.mayor===p.id&&ST.alive[p.id]?" 🎖️":""}${r?`<br><small>${EMO[r]||""} ${rn(r)}</small>`:""}</div></div>`}).join("");
 }
 function renderRole(){
   if(IGM){$("g-role").innerHTML="<p>Tu es le Maître du jeu.</p>";return}
   const x=mySecret; if(!x) return; const r=ROLES.find(r=>r[0]===x.role);
-  $("g-role").innerHTML=`<div class="card" style="border-color:${COLORS[r[2]]}"><h2><span class="big">${EMO[x.role]||""}</span> ${r[1]}</h2><p>${r[3]}</p>${x.mates.length?`<p>Ta meute : <b>${x.mates.map(esc).join(", ")}</b></p>`:""}${x.info?`<p><b>${esc(x.info)}</b></p>`:""}${x.charm?.length?`<p>Charmés : ${x.charm.map(esc).join(", ")}</p>`:""}</div>`;
+  $("g-role").innerHTML=`<div class="card" style="border-color:${COLORS[r[2]]}"><h2><span class="big">${EMO[x.role]||""}</span> ${r[1]}</h2><p>${r[3]}</p><p><small>${CAMP[r[2]]}</small></p>${x.mates.length?`<p>Ta meute : <b>${x.mates.map(esc).join(", ")}</b></p>`:""}${x.info?`<p><b>${esc(x.info)}</b></p>`:""}${x.charm?.length?`<p>Charmés : ${x.charm.map(esc).join(", ")}</p>`:""}</div>`;
 }
 function renderAct(){
   const el=$("g-act"); if(IGM||!mySecret){el.classList.add("hidden");return}
   if(lastKey!==key()){lastKey=key();sel=[];saveW=false}
   const wr=ST.wake?.role, r=(wr==="loup"&&(mySecret.wolfx||isW(mySecret.role)))?"loup":mySecret.role, ok=()=>sent===key(), others=alive().filter(u=>u!==me.uid); let h="";
   if(ST.phase==="over") h="La partie est terminée.";
-  else if(ST.phase==="hunter"&&ST.hunter.uid===me.uid) h=ok()?"Tir envoyé.":`<p><span class="coin">🪙</span> Tu es un <b>${ST.hunter.good?"bon":"mauvais"} chasseur</b>${ST.hunter.good?"":" : la roue peut dévier ton tir"}. Choisis ta cible :</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Tirer</button>`;
+  else if(ST.phase==="hunter"&&ST.hunter.uid===me.uid){const H=ST.hunter, wh=t=>`<p>${t}</p><button data-spin="${H.stage}">🎡 Faire tourner la roue</button>`;
+    h=ok()?"La roue tourne…":H.stage==="w1"?wh("Tu es mort, mais tu as droit à un dernier tir ! Fais tourner la roue : bon ou mauvais chasseur ?")
+      :H.stage==="w2"?wh("Mauvais chasseur… Fais tourner la roue : ton tir part-il, ou est-il raté ?")
+      :H.stage==="w3"?wh(`Tu vises ${esc(nm(H.target))}. Fais tourner la roue : c’est son voisin de gauche ou de droite qui sera touché ?`)
+      :`<p>${H.good?"Bon chasseur : ton tir touchera ta cible.":"Ton tir part ! Choisis ta cible (la roue pourra dévier le tir)."}</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Tirer</button>`}
   else if(ST.phase==="bienaimee"&&ST.ba.uid===me.uid) h=ok()?"Choix envoyé.":`<p>Désigne une personne dont le MJ citera le rôle :</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Valider</button>`;
   else if(ST.phase==="curieux"&&ST.cur.uid===me.uid) h=ok()?"Choix envoyé.":`<p>Choisis un électeur dont découvrir le rôle :</p><div class="row">${ST.cur.opts.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Valider</button>`;
   else if(!ST.alive[me.uid]) h="Tu es mort(e). Tu observes la partie en silence.";
   else if(ST.phase==="vote"){const v=myVote?.id===ST.vote.id?myVote:null; if(v)myVote=v;
-    h=`<p>Qui éliminer ? <b id="cd"></b></p><div class="row">${others.map(u=>btn(u,"data-vote")).join("")}</div>`;}
+    h=`<p>Qui éliminer ?${ST.mayor===me.uid?" (ta voix compte double)":""} <b id="cd"></b></p><div class="row">${others.map(u=>btn(u,"data-vote")).join("")}</div>`;}
   else if(ST.phase==="night"&&(r==="petitefille"?wr==="loup":wr===r)){
     if(ok()) h="Choix envoyé. Attends que le MJ te rendorme.";
     else{const max=ST.wake.max||1, w=mySecret.witch, ab=mySecret.ability;
@@ -447,9 +452,10 @@ $("g-act").onclick=async e=>{
   try{
     if(d.a==="replay"){await replay(); return}
     if(d.vote){myVote={id:ST.vote.id,t:d.vote}; await setDoc(doc(db,"rooms",roomCode,"votes",me.uid),{id:ST.vote.id,target:d.vote})}
+    else if(d.spin){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,stage:d.spin,targets:[],save:false,wolf:false}); sent=key()}
     else if(d.save) saveW=!saveW;
     else if(d.t) sel=sel.includes(d.t)?sel.filter(x=>x!==d.t):[...sel,d.t].slice(-max);
-    else if(d.ok){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,targets:sel,save:saveW,wolf:ST.wake?.role==="loup"}); sent=key()}
+    else if(d.ok){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,stage:ST.hunter?.stage||null,targets:sel,save:saveW,wolf:ST.wake?.role==="loup"}); sent=key()}
   }catch(err){fail(err)}
   renderAct();
 };
@@ -470,7 +476,7 @@ function renderGM(){
     if(G.steps.every(s=>G.done[s])) h+=`<div class="row"><button data-a="dawn">Lever le jour</button></div>`;
   } else if(ph==="day") h=`<div class="row"><button data-a="vote">Lancer le vote (10 s)</button></div>`;
   else if(ph==="vote") h=`<p>Vote en cours : <b id="cd"></b></p><button data-a="close">Clore le vote maintenant</button>`;
-  else if(ph==="hunter"){const a=ACT[ST.hunter.uid]; h=`<p>Chasseur : ${nm(ST.hunter.uid)} (${ST.hunter.good?"bon":"mauvais"}). ${a?.wakeId===ST.wakeId?"Cible : "+nm(a.targets[0]):"Il choisit…"}</p><button data-a="hunt" ${a?.wakeId===ST.wakeId?"":"disabled"}>Valider le tir</button>`}
+  else if(ph==="hunter") h=`<p>Chasseur ${esc(nm(ST.hunter.uid))} : la roue est entre ses mains (étape ${ST.hunter.stage}).</p>`;
   if(ph==="night"&&Object.values(G.roles).includes("pronostiqueur")) h+=`<label class="room"><span>Le Pronostiqueur ment</span><input type="checkbox" id="lie" style="width:auto" ${G.lie?"checked":""}></label>`;
   if(ph==="bienaimee"){const a=ACT[ST.ba.uid];
     if(a?.wakeId!==ST.wakeId) h="<p>La Sorcière choisit une personne…</p>";
@@ -483,7 +489,7 @@ function renderGM(){
 }
 async function gmClick(e){
   const b=e.target.closest("button[data-a]"); if(!b) return; const a=b.dataset.a, s=b.dataset.s;
-  try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="close")await closeVote(); if(a==="hunt")await resolveHunter(); if(a==="cur")await resolveCurieux(); if(a==="cite")await cite();
+  try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="close")await closeVote(); if(a==="cur")await resolveCurieux(); if(a==="cite")await cite();
     if(a==="fake"){const fs=G.fakeSel||[]; G.fakeSel=fs.includes(s)?fs.filter(x=>x!==s):[...fs,s].slice(-2); renderGM()} if(a==="pdf")makePdf();
     if(a==="word"||a==="forgot"){const bv=alive().find(u=>G.roles[u]==="loupbav");
       if(a==="word"){G.word=$("word").value; await updateDoc(sd(bv),{info:"Mot du jour à dire : "+G.word})}
@@ -554,11 +560,8 @@ function winner(){
   if(w===0) return "le village"; if(w>=al.length-w) return "les Loups-Garous"; return null;
 }
 async function after(next){
-  if(G.hunters.length){const h=G.hunters.shift(), good=Math.random()<.5, fires=good||Math.random()<.5;
-    G.log.push(`${nm(h)} (Chasseur) : ${good?"bon":"mauvais"} chasseur${fires?"":", son tir est raté"}`);
-    ST.fx={k:"coin",good,id:Date.now(),miss:!fires}; if(!fires) ST.msg=`${nm(h)} (Chasseur) est un mauvais chasseur : son tir est raté.`;
-    if(fires){ST.phase="hunter"; ST.hunter={uid:h,good}; ST.wakeId++; G.next=next; await push(); return}
-    return after(next)}
+  if(G.hunters.length){const h=G.hunters.shift(); ST.phase="hunter"; ST.hunter={uid:h,stage:"w1"}; ST.wakeId++; G.next=next;
+    ST.msg=`${nm(h)} (Chasseur) a droit à un dernier tir : il fait tourner la roue !`; G.log.push(`${nm(h)} (Chasseur) tire une dernière fois`); await push(); return}
   ST.hunter=null; await flush();
   if(G.pendingBA&&alive().length>1){const w=G.pendingBA; G.pendingBA=null; ST.phase="bienaimee"; ST.ba={uid:w}; ST.wakeId++; G.next=next; await push(); return}
   G.pendingBA=null;
@@ -591,7 +594,7 @@ async function dawn(){
 async function startVote(){
   if(G.coup){const {by,t}=G.coup; G.coup=null;
     if(ST.alive[by]&&ST.alive[t]){ST.vote=null;
-      if(isWU(t)){kill(t,"coup d’État"); G.mayor=by; ST.msg=`Coup d’État ! ${nm(by)} élimine ${nm(t)}, un Loup-Garou, et devient Maire.`}
+      if(isWU(t)){kill(t,"coup d’État"); G.mayor=by; ST.mayor=by; ST.msg=`Coup d’État ! ${nm(by)} élimine ${nm(t)}, un Loup-Garou, et devient Maire : sa voix comptera double.`}
       else{kill(t,"coup d’État"); kill(by,"coup d’État raté"); ST.msg=`Coup d’État raté : ${nm(by)} a éliminé un innocent (${nm(t)}) et meurt.`}
       return after("night")}}
   ST.phase="vote"; ST.vote={id:++G.voteId,end:Date.now()+10000}; await push();
@@ -600,7 +603,7 @@ async function startVote(){
 async function closeVote(){
   if(ST.phase!=="vote") return; clearTimeout(timer); G.voteN++; const vid=ST.vote.id;
   const q=await getDocs(collection(db,"rooms",roomCode,"votes")), c={};
-  q.docs.forEach(d=>{const v=d.data(); if(v.id===ST.vote.id&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+1});
+  q.docs.forEach(d=>{const v=d.data(); if(v.id===ST.vote.id&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+(d.id===G.mayor?2:1)});
   const max=Math.max(0,...Object.values(c)), top=Object.keys(c).filter(u=>c[u]===max);
   G.log.push("Vote : "+(Object.entries(c).map(([u,n])=>nm(u)+" "+n).join(", ")||"aucun vote"));
   if(top.length===1&&top[0]===G.shield){ST.msg=`${nm(top[0])} est protégé par un Loup : personne n'est éliminé.`; ST.vote=null; return after("night")}
@@ -617,12 +620,23 @@ async function closeVote(){
   if(alive().length<=3&&top.length>1){ST.msg="Égalité à 3 joueurs : nouveau vote !"; return startVote()}
   ST.msg="Égalité : personne n'est éliminé."; ST.vote=null; await after("night");
 }
-async function resolveHunter(){
-  const h=ST.hunter, a=ACT[h.uid]; if(a?.wakeId!==ST.wakeId) return;
-  const t=a.targets[0]; let v=t; ST.msg=`${nm(h.uid)} tire sur ${nm(t)}.`;
-  if(!h.good){const o=players.filter(p=>p.role==="player"&&ST.alive[p.id]).map(p=>p.id), side=Math.random()<.5?-1:1;
-    v=o[(o.indexOf(t)+side+o.length)%o.length]; ST.fx={k:"wheel",side,id:Date.now()}; ST.msg+=` La roue (${side<0?"gauche":"droite"}) touche ${nm(v)}.`}
-  kill(v,"tir du chasseur"); ST.hunter=null; await after(G.next);
+async function hunterAuto(){
+  if(!IGM||!G||!ST||ST.phase!=="hunter") return;
+  const H=ST.hunter, a=ACT[H.uid]; if(!a||a.wakeId!==ST.wakeId||a.stage!==H.stage) return;
+  const k=ST.wakeId+H.stage; if(G.hk===k) return; G.hk=k;
+  const h=H.uid, wheel=l=>{ST.fx={k:"wheel",label:l,id:Date.now()}};
+  try{
+    if(H.stage==="w1"){H.good=Math.random()<.5; wheel(H.good?"Bon chasseur !":"Mauvais chasseur…"); G.log.push(`${nm(h)} : ${H.good?"bon":"mauvais"} chasseur`);
+      H.stage=H.good?"pick":"w2"; ST.msg=H.good?`${nm(h)} est un bon chasseur : il choisit sa cible.`:`${nm(h)} est un mauvais chasseur… la roue décidera si son tir part.`; await push()}
+    else if(H.stage==="w2"){const fires=Math.random()<.5; wheel(fires?"Le tir part !":"Tir raté !"); G.log.push(`${nm(h)} : ${fires?"le tir part":"tir raté"}`);
+      if(fires){H.stage="pick"; ST.msg=`${nm(h)} choisit sa cible.`; await push()} else {ST.msg=`${nm(h)} a raté son tir.`; ST.hunter=null; await after(G.next)}}
+    else if(H.stage==="pick"){const t=a.targets[0]; if(!t||!ST.alive[t]){G.hk=null; return}
+      if(H.good){ST.msg=`${nm(h)} tire sur ${nm(t)}.`; ST.hunter=null; kill(t,"tir du chasseur"); await after(G.next)}
+      else{H.target=t; H.stage="w3"; ST.msg=`${nm(h)} vise ${nm(t)}… la roue décidera qui est touché.`; await push()}}
+    else if(H.stage==="w3"){const o=players.filter(p=>p.role==="player"&&ST.alive[p.id]).map(p=>p.id), side=Math.random()<.5?-1:1, t=H.target, v=o[(o.indexOf(t)+side+o.length)%o.length];
+      wheel(side<0?"⬅️ Gauche":"Droite ➡️"); ST.msg=`${nm(h)} visait ${nm(t)} : la roue (${side<0?"gauche":"droite"}) touche ${nm(v)}.`;
+      G.log.push(`Tir dévié : ${nm(v)} touché`); ST.hunter=null; kill(v,"tir du chasseur"); await after(G.next)}
+  }catch(e){fail(e)}
 }
 async function flush(){const q=G.q; G.q=[];
   for(const [u,p] of q){if(p.role==="loup"||p.wolfx) p.mates=alive().filter(x=>x!==u&&isWU(x)).map(nm); await updateDoc(sd(u),p)}}
@@ -775,8 +789,7 @@ function effects(){
     lastPh=ST.phase}
   if(lastDead>=0&&ST.dead.length>lastDead) beep(SND.death); lastDead=ST.dead.length;
   const f=ST.fx; if(f&&f.id!==lastFx){const fresh=Date.now()-f.id<5000; lastFx=f.id;
-    if(fresh) banner(f.k==="coin"?`<span class="spin">🪙</span><small>${f.good?"Bon chasseur":"Mauvais chasseur"}${f.miss?" : tir raté":""}</small>`
-      :`<span class="spin">🎡</span><small>${f.side<0?"⬅️ Gauche":"Droite ➡️"}</small>`,"coin")}
+    if(fresh) banner(`<span class="spin">🎡</span><small>${f.label||""}</small>`,"coin")}
 }
 $("b-snd").onclick=()=>{sound=!sound; $("b-snd").textContent=sound?"🔊":"🔇"};
 const replay=()=>updateDoc(doc(db,"rooms",roomCode),{status:"lobby"}).catch(fail);
