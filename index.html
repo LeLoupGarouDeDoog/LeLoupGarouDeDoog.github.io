@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loup-Garou en ligne</title>
+<title>Loup-Garou de DoogBarrow</title>
 <link href="https://fonts.googleapis.com/css2?family=Almendra:wght@700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#1c2536;--panel:#273550;--ink:#ece9f6;--mute:#9aa6c0;--moon:#f2c94c;--wolf:#c8463c;--ok:#4caf7a;color-scheme:dark}
@@ -11,7 +11,7 @@
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Nunito,sans-serif}
 main{max-width:560px;margin:0 auto;padding:24px 16px 64px}
 h1,h2{font-family:Almendra,serif;margin:0 0 12px;color:var(--moon)}
-h1{font-size:2.4rem;text-align:center;margin-top:24px}
+h1{font-size:2.2rem;text-align:center;margin-top:24px}
 .panel{background:var(--panel);border-radius:14px;padding:18px;margin-bottom:16px}
 button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 16px;background:var(--moon);color:#1c2536;cursor:pointer}
 button.alt{background:transparent;color:var(--ink);border:2px solid var(--mute)}
@@ -30,12 +30,14 @@ canvas{background:#fff;border-radius:50%;touch-action:none;width:160px;height:16
 .p img{width:72px;height:72px;border-radius:50%;border:3px solid var(--mute);object-fit:cover;background:#fff}
 .p.gm img{border-color:var(--wolf)}
 .err{color:#ff9b8f;min-height:1.4em}
-.code{font-family:Almendra,serif;font-size:1.6rem;color:var(--moon)}
+.code{font-family:Almendra,serif;font-size:1.6rem;color:var(--moon);letter-spacing:.15em}
+footer{text-align:center;color:var(--mute);padding:8px 16px 32px;font-size:.9rem}
+footer a{color:var(--moon)}
 </style>
 </head>
 <body>
 <main>
-<h1>Loup-Garou</h1>
+<h1>Loup-Garou de DoogBarrow</h1>
 <p class="err" id="err" role="alert"></p>
 
 <!-- Écran 1 : connexion -->
@@ -73,7 +75,7 @@ canvas{background:#fff;border-radius:50%;touch-action:none;width:160px;height:16
   </div>
   <div class="panel">
     <h2>Rejoindre avec un code</h2>
-    <div class="row"><input id="code-in" placeholder="Ex. trytoact" maxlength="12"><button id="b-join">Rejoindre</button></div>
+    <div class="row"><input id="code-in" type="password" autocomplete="off" placeholder="Code de la room" maxlength="12"><button id="b-join">Rejoindre</button></div>
   </div>
   <div class="panel">
     <h2>Rooms publiques</h2>
@@ -86,7 +88,7 @@ canvas{background:#fff;border-radius:50%;touch-action:none;width:160px;height:16
 <section id="s-lobby" class="hidden">
   <div class="panel">
     <h2>Lobby</h2>
-    <p>Code de la room : <span class="code" id="l-code"></span> <span id="l-vis"></span></p>
+    <p>Code de la room : <span class="code">••••••</span> <button class="alt" id="b-copy" type="button">Copier</button> <span id="l-vis"></span></p>
     <div class="row">
       <button id="b-role-p">Je joue</button>
       <button id="b-role-gm" class="alt">Je suis Maître du jeu</button>
@@ -100,6 +102,7 @@ canvas{background:#fff;border-radius:50%;touch-action:none;width:160px;height:16
   <div class="row"><button id="b-start" disabled>Lancer la partie</button><button class="alt" id="b-leave">Quitter</button></div>
 </section>
 </main>
+<footer>Idée de <a href="https://www.twitch.tv/doogbarrow" target="_blank" rel="noopener">DoogBarrow</a> et créé par <a href="https://www.twitch.tv/crackersmc_" target="_blank" rel="noopener">CrackersMc</a></footer>
 
 <script type="module">
 // 1) Colle ici la config de ton projet Firebase (Paramètres du projet > Tes applications > Web)
@@ -115,7 +118,7 @@ const firebaseConfig = {
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithPopup,GoogleAuthProvider,signInAnonymously}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,doc,setDoc,getDoc,deleteDoc,collection,onSnapshot,query,where,serverTimestamp,updateDoc}
+import {getFirestore,doc,setDoc,getDoc,deleteDoc,collection,onSnapshot,query,where,serverTimestamp,updateDoc,increment}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
@@ -160,7 +163,7 @@ function goHome(){
   unsubs.forEach(u=>u()); unsubs=[];
   unsubs.push(onSnapshot(query(collection(db,"rooms"),where("public","==",true),where("status","==","lobby")),s=>{
     $("list").innerHTML=s.empty?"<p>Aucune room ouverte pour l’instant. Crée la première.</p>":"";
-    s.forEach(d=>{const r=d.data(),el=document.createElement("div");el.className="room";
+    s.forEach(d=>{const r=d.data(); if((r.count||0)<=0) return; const el=document.createElement("div");el.className="room";
       el.innerHTML=`<span>${r.hostName} <small>(${r.count||0}/${MAX_PLAYERS})</small></span>`;
       const b=document.createElement("button");b.textContent="Rejoindre";b.onclick=()=>joinRoom(d.id);el.append(b);$("list").append(el)});
   },fail));
@@ -180,9 +183,15 @@ $("b-join").onclick=()=>joinRoom($("code-in").value.trim().toLowerCase());
 async function joinRoom(code){
   const room=await getDoc(doc(db,"rooms",code));
   if(!room.exists()) return fail({message:"Code inconnu."});
-  roomCode=code; await setDoc(doc(db,"rooms",code,"players",me.uid),{name:profile.name,avatar:profile.avatar,role:"player",joinedAt:serverTimestamp()}).catch(fail);
+  const pref=doc(db,"rooms",code,"players",me.uid);
+  const already=(await getDoc(pref)).exists();
+  roomCode=code;
+  try{
+    await setDoc(pref,{name:profile.name,avatar:profile.avatar,role:"player",joinedAt:serverTimestamp()});
+    if(!already) await updateDoc(doc(db,"rooms",code),{count:increment(1)});
+  }catch(e){roomCode=null; return fail(e)}
   $("err").textContent=""; show("s-lobby");
-  $("l-code").textContent=code; $("l-vis").textContent=room.data().public?"(publique)":"(privée)";
+  $("l-vis").textContent=room.data().public?"(publique)":"(privée)";
   $("l-host").classList.toggle("hidden",room.data().hostUid!==me.uid);
   unsubs.forEach(u=>u()); unsubs=[];
   unsubs.push(onSnapshot(collection(db,"rooms",code,"players"),s=>renderLobby(s.docs.map(d=>({id:d.id,...d.data()})))));
@@ -199,7 +208,23 @@ function renderLobby(list){
 const setRole=r=>updateDoc(doc(db,"rooms",roomCode,"players",me.uid),{role:r}).catch(fail);
 $("b-role-p").onclick=()=>setRole("player");
 $("b-role-gm").onclick=()=>setRole("gm");
-$("b-leave").onclick=async()=>{await deleteDoc(doc(db,"rooms",roomCode,"players",me.uid));roomCode=null;goHome()};
+async function leaveRoom(){
+  if(!roomCode) return;
+  const code=roomCode, ref=doc(db,"rooms",code); roomCode=null;
+  unsubs.forEach(u=>u()); unsubs=[];
+  try{
+    await deleteDoc(doc(db,"rooms",code,"players",me.uid));
+    await updateDoc(ref,{count:increment(-1)});
+    const r=await getDoc(ref);
+    if(r.exists()&&(r.data().count||0)<=0) await deleteDoc(ref); // room vide : supprimée
+  }catch(e){console.error(e)}
+}
+$("b-leave").onclick=async()=>{await leaveRoom();goHome()};
+addEventListener("pagehide",()=>{leaveRoom()});
+$("b-copy").onclick=async()=>{
+  try{await navigator.clipboard.writeText(roomCode);$("b-copy").textContent="Copié !";setTimeout(()=>$("b-copy").textContent="Copier",1500)}
+  catch(e){fail({message:"Copie impossible : autorise le presse-papiers."})}
+};
 $("b-start").onclick=()=>fail({message:"Le moteur de partie arrive à l’étape 2."});
 </script>
 </body>
