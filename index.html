@@ -102,7 +102,7 @@ footer a{color:var(--moon)}
   </div>
   <div class="panel"><div class="players" id="l-players"></div><p id="l-count"></p></div>
   <div class="panel hidden" id="l-host">
-    <h2>Réglages de l’host</h2>
+    <h2>Réglages du MJ</h2>
     <div id="h-roles"></div><p id="h-total"></p><h2>Scénarios</h2><div id="h-scen"></div>
   </div>
   <div class="row"><button id="b-start" disabled>Lancer la partie</button><button class="alt" id="b-leave">Quitter</button></div>
@@ -219,7 +219,7 @@ function renderLobby(list){
   $("l-players").innerHTML=list.map(p=>`<div class="p ${p.role}"><img src="${p.avatar}" alt=""><div>${p.name.replace(/</g,"&lt;")}${p.role==="gm"?"<br>MJ":""}</div>${isHost()&&p.id!==me.uid?`<button class="alt" data-kick="${p.id}">Expulser</button>`:""}</div>`).join("");
   $("l-count").textContent=`${pl.length}/${MAX_PLAYERS} joueurs, ${gm.length}/1 maître du jeu`;
   players=list; plCount=pl.length; gmCount=gm.length; amGm=list.find(p=>p.id===me.uid)?.role==="gm";
-  const panel=isHost()||amGm; $("l-host").classList.toggle("hidden",!panel); if(panel) ensureCfg(); refreshStart(); if(started) drawTable();
+  const panel=amGm; $("l-host").classList.toggle("hidden",!panel); if(panel) ensureCfg(); refreshStart(); if(started) drawTable();
   const mine=list.find(p=>p.id===me.uid);
   $("b-role-gm").disabled=gm.length>=1&&mine?.role!=="gm";
   $("b-role-p").disabled=pl.length>=MAX_PLAYERS&&mine?.role!=="player";
@@ -290,7 +290,7 @@ const saveCfg=()=>setDoc(doc(db,"rooms",roomCode,"private","config"),cfg).catch(
 
 function refreshStart(){
   $("h-total").textContent=`${total()} rôles pour ${plCount} joueurs`+(total()===plCount?" : parfait.":" : le nombre doit être identique.");
-  $("b-start").disabled=!((isHost()||amGm)&&gmCount===1&&plCount>=1&&total()===plCount);
+  $("b-start").disabled=!(amGm&&gmCount===1&&plCount>=1&&total()===plCount);
 }
 function renderHost(){
   $("h-roles").innerHTML=ROLES.map(r=>`<div class="room"><span style="color:${COLORS[r[2]]}">${r[1]}</span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`).join("");
@@ -657,7 +657,7 @@ async function kicked(){
 }
 const replay=()=>updateDoc(doc(db,"rooms",roomCode),{status:"lobby"}).catch(fail);
 async function backToLobby(){
-  await closeVoice(); const c=roomCode; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={}; IGM=false;
+  const c=roomCode; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={}; IGM=false; applyMute(); // le vocal reste actif entre deux parties
   await joinRoom(c);
 }
 </script>
