@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loup-Garou de DoogBarrow</title>
+<title>WolfParty</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Almendra:wght@700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -59,7 +59,7 @@ footer a{color:var(--moon)}
 </head>
 <body>
 <main>
-<h1>Loup-Garou de DoogBarrow</h1>
+<h1>WolfParty</h1>
 <p class="err" id="err" role="alert"></p>
 
 <!-- Écran 1 : connexion -->
@@ -83,11 +83,13 @@ footer a{color:var(--moon)}
       <div class="row"><button class="alt" id="b-clear">Effacer</button></div>
     </div>
   </div>
+  <div class="row"><input type="file" id="f-img" accept="image/*" style="flex:1 1 180px"><button class="alt hidden" id="b-gphoto" type="button">Utiliser ma photo Google</button></div>
   <div class="row"><button id="b-save">Enregistrer</button></div>
 </section>
 
 <!-- Écran 3 : accueil -->
 <section id="s-home" class="hidden">
+  <div class="panel row" id="acct"></div>
   <div class="panel">
     <h2>Créer une partie</h2>
     <div class="row">
@@ -107,6 +109,10 @@ footer a{color:var(--moon)}
 </section>
 
 <!-- Écran 4 : lobby -->
+<section id="s-recap" class="hidden">
+  <div class="panel"><h2>Récap de tes parties</h2><div id="recap-list"></div></div>
+  <button class="alt" id="b-recap-back">Retour</button>
+</section>
 <section id="s-lobby" class="hidden">
   <div class="panel">
     <h2>Lobby</h2>
@@ -116,10 +122,10 @@ footer a{color:var(--moon)}
       <button id="b-role-gm" class="alt">Je suis Maître du jeu</button>
     </div>
   </div>
-  <div class="panel"><div class="players" id="l-players"></div><p id="l-count"></p></div>
+  <div class="panel"><div class="players" id="l-players"></div><p id="l-count"></p><label id="l-auto-wrap" class="row hidden"><input type="checkbox" id="l-auto" style="width:auto;flex:0 0 auto"> MJ automatique : pas de Maître du jeu, tout le monde joue</label></div>
   <div class="panel hidden" id="l-host">
     <h2>Réglages du MJ</h2>
-    <div id="h-roles"></div><p id="h-total"></p><h2>Scénarios</h2><div id="h-scen"></div>
+    <div id="h-roles"></div><p id="h-total"></p><label id="h-autoopts" class="row hidden">Durée de discussion du jour : <select id="h-day" style="width:auto"><option value="60">1 min</option><option value="90">1 min 30</option><option value="120">2 min</option><option value="180">3 min</option></select></label><h2>Scénarios</h2><div id="h-scen"></div>
   </div>
   <div class="row"><button id="b-start" disabled>Lancer la partie</button><button class="alt" id="b-leave">Quitter</button></div>
 </section>
@@ -147,14 +153,14 @@ const firebaseConfig = {
 };
 
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getAuth,onAuthStateChanged,signInWithPopup,GoogleAuthProvider,signInAnonymously}
+import {getAuth,onAuthStateChanged,signInWithPopup,GoogleAuthProvider,signInAnonymously,signOut}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {getFirestore,doc,setDoc,getDoc,deleteDoc,collection,onSnapshot,query,where,serverTimestamp,updateDoc,increment,getDocs,arrayUnion,runTransaction}
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
 const $=id=>document.getElementById(id);
-const show=id=>{if(id!=="s-game") document.body.dataset.phase=""; ["s-login","s-profile","s-home","s-lobby","s-game"].forEach(s=>$(s).classList.toggle("hidden",s!==id)); $("voice").classList.toggle("hidden",!["s-lobby","s-game"].includes(id))};
+const show=id=>{if(id!=="s-game") document.body.dataset.phase=""; ["s-login","s-profile","s-home","s-recap","s-lobby","s-game"].forEach(s=>$(s).classList.toggle("hidden",s!==id)); $("voice").classList.toggle("hidden",!["s-lobby","s-game"].includes(id))};
 const fail=e=>{$("err").textContent=e.message||String(e)};
 let me=null, profile=null, roomCode=null, unsubs=[];
 const MAX_PLAYERS=12;
@@ -165,37 +171,37 @@ const LIVEKIT={url:"",tokenUrl:""};
 $("b-google").onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(fail);
 $("b-anon").onclick=()=>signInAnonymously(auth).catch(fail);
 onAuthStateChanged(auth,async u=>{
-  me=u; if(!u) return show("s-login");
+  me=u; if(!u){unsubs.forEach(x=>x()); unsubs=[]; return show("s-login")}
   try{
     const snap=await getDoc(doc(db,"users",u.uid));
     if(snap.exists()){profile=snap.data(); const rc=localStorage.getItem("lg-room");
       const back=rc&&await getDoc(doc(db,"rooms",rc,"players",u.uid)).then(d=>d.exists()).catch(()=>false);
       if(back) await joinRoom(rc); else {localStorage.removeItem("lg-room"); goHome();}
-    } else show("s-profile");
+    } else openProfile(u);
   }catch(e){console.error(e); fail(e); show("s-profile");}
 });
 
 // ---------- Avatar façon Gartic Phone ----------
-const cv=$("cv"), ctx=cv.getContext("2d"); let color="#1c2536", drawing=false;
+const cv=$("cv"), ctx=cv.getContext("2d"); let color="#1c2536", drawing=false, chosen=null;
 ctx.fillStyle="#fff"; ctx.fillRect(0,0,160,160); ctx.lineWidth=6; ctx.lineCap="round";
 ["#1c2536","#c8463c","#f2c94c","#4caf7a","#3b82c4","#8e5bd0","#ffffff"].forEach(c=>{
   const i=document.createElement("i"); i.style.background=c; i.onclick=()=>color=c; $("colors").append(i);
 });
 const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*160/r.width,(e.clientY-r.top)*160/r.height]};
-cv.onpointerdown=e=>{drawing=true;ctx.strokeStyle=color;ctx.beginPath();ctx.moveTo(...pos(e));cv.setPointerCapture(e.pointerId)};
+cv.onpointerdown=e=>{chosen=null; drawing=true;ctx.strokeStyle=color;ctx.beginPath();ctx.moveTo(...pos(e));cv.setPointerCapture(e.pointerId)};
 cv.onpointermove=e=>{if(drawing){ctx.lineTo(...pos(e));ctx.stroke()}};
 cv.onpointerup=()=>drawing=false;
-$("b-clear").onclick=()=>{ctx.fillStyle="#fff";ctx.fillRect(0,0,160,160)};
+$("b-clear").onclick=()=>{chosen=null; ctx.fillStyle="#fff";ctx.fillRect(0,0,160,160)};
 $("b-save").onclick=async()=>{
   const name=$("pseudo").value.trim(); if(!name) return fail({message:"Choisis un pseudo."});
-  profile={name,avatar:cv.toDataURL("image/jpeg",.6)};
+  profile={name,avatar:chosen||cv.toDataURL("image/jpeg",.6)};
   await setDoc(doc(db,"users",me.uid),profile).catch(fail); goHome();
 };
-$("b-edit").onclick=()=>{$("pseudo").value=profile.name;show("s-profile")};
+$("b-edit").onclick=()=>{$("pseudo").value=profile.name; $("b-gphoto").classList.toggle("hidden",me.isAnonymous||!me.photoURL); show("s-profile")};
 
 // ---------- Accueil et liste des rooms publiques ----------
 function goHome(){
-  $("err").textContent=""; show("s-home");
+  $("err").textContent=""; show("s-home"); renderAcct();
   unsubs.forEach(u=>u()); unsubs=[];
   unsubs.push(onSnapshot(query(collection(db,"rooms"),where("public","==",true),where("status","==","lobby")),s=>{
     $("list").innerHTML=s.empty?"<p>Aucune room ouverte pour l’instant. Crée la première.</p>":"";
@@ -231,20 +237,26 @@ async function joinRoom(code){
   }catch(e){roomCode=null; return fail(e)}
   localStorage.setItem("lg-room",code); $("err").textContent=""; show("s-lobby");
   $("l-vis").textContent=room.data().public?"(publique)":"(privée)";
-  hostUid=room.data().hostUid; cfgLoaded=false; $("l-host").classList.add("hidden");
+  hostUid=room.data().hostUid; autoMode=!!room.data().auto; cfgLoaded=false; $("l-host").classList.add("hidden");
   unsubs.forEach(u=>u()); unsubs=[];
   unsubs.push(onSnapshot(collection(db,"rooms",code,"players"),s=>renderLobby(s.docs.map(d=>({id:d.id,...d.data()})))));
-  unsubs.push(onSnapshot(doc(db,"rooms",code),d=>{if(!d.exists())return; if(players.length&&d.data().hostUid!==hostUid){hostUid=d.data().hostUid; renderLobby(players)} const st=d.data().status; if(st==="playing")enterGame(); else if(st==="lobby"&&started)backToLobby()}));
+  unsubs.push(onSnapshot(doc(db,"rooms",code),d=>{if(!d.exists())return; const au=!!d.data().auto; let ch=false;
+    if(d.data().hostUid!==hostUid){hostUid=d.data().hostUid; ch=true}
+    if(au!==autoMode){autoMode=au; ch=true}
+    if(ch&&players.length){renderLobby(players); renderHost()}
+    if(started&&eng()&&!engineOn) startEngine();
+    const st=d.data().status; if(st==="playing")enterGame(); else if(st==="lobby"&&started)backToLobby()}));
 }
 function renderLobby(list){
   if(roomCode&&!list.some(p=>p.id===me.uid)) return kicked();
   const gm=list.filter(p=>p.role==="gm"), pl=list.filter(p=>p.role==="player");
-  $("l-players").innerHTML=list.map(p=>`<div class="p ${p.role}"><img src="${p.avatar}" alt=""><div>${p.name.replace(/</g,"&lt;")}${p.role==="gm"?"<br>MJ":""}</div>${isHost()&&p.id!==me.uid?`<button class="alt" data-kick="${p.id}">Expulser</button>`:""}</div>`).join("");
-  $("l-count").textContent=`${pl.length}/${MAX_PLAYERS} joueurs, ${gm.length}/1 maître du jeu`;
+  $("l-players").innerHTML=list.map(p=>`<div class="p ${p.role}"><img referrerpolicy="no-referrer" src="${p.avatar}" alt=""><div>${p.name.replace(/</g,"&lt;")}${p.role==="gm"?"<br>MJ":""}</div>${isHost()&&p.id!==me.uid?`<button class="alt" data-kick="${p.id}">Expulser</button>`:""}</div>`).join("");
+  $("l-count").textContent=`${pl.length}/${MAX_PLAYERS} joueurs, ${autoMode?"MJ automatique":gm.length+"/1 maître du jeu"}`;
   players=list; plCount=pl.length; gmCount=gm.length; amGm=list.find(p=>p.id===me.uid)?.role==="gm";
-  const panel=amGm; $("l-host").classList.toggle("hidden",!panel); if(panel) ensureCfg(); refreshStart(); if(started) drawTable();
+  const panel=amGm||(autoMode&&isHost()); $("l-host").classList.toggle("hidden",!panel); if(panel) ensureCfg(); refreshStart(); if(started) drawTable();
   const mine=list.find(p=>p.id===me.uid);
-  $("b-role-gm").disabled=gm.length>=1&&mine?.role!=="gm";
+  $("b-role-gm").disabled=autoMode||(gm.length>=1&&mine?.role!=="gm");
+  $("l-auto-wrap").classList.toggle("hidden",!isHost()); $("l-auto").checked=autoMode; $("l-auto").disabled=gm.length>0;
   $("b-role-p").disabled=pl.length>=MAX_PLAYERS&&mine?.role!=="player";
 }
 const setRole=async r=>{
@@ -259,7 +271,7 @@ $("b-role-gm").onclick=()=>setRole("gm");
 async function leaveRoom(){
   if(!roomCode) return;
   const wasHost=isHost(), wasGm=amGm, nextH=players.find(p=>p.id!==me.uid)?.id; localStorage.removeItem("lg-room");
-  await closeVoice(); const code=roomCode, ref=doc(db,"rooms",code); roomCode=null; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={};
+  await closeVoice(); const code=roomCode, ref=doc(db,"rooms",code); roomCode=null; started=false; ST=G=mySecret=null; engineOn=false; wolfSub=false; ACT={}; WOLF={};
   unsubs.forEach(u=>u()); unsubs=[];
   try{
     await deleteDoc(doc(db,"rooms",code,"players",me.uid));
@@ -283,7 +295,7 @@ const ROLES=[
  ["loup","Loup-Garou","wolf","Chaque nuit, tu te réveilles avec les autres Loups et vous choisissez ensemble une victime : vous devez tous désigner la même personne. Le jour, fais semblant d’être un simple villageois pour ne pas te faire éliminer.",12],
  ["villageois","Villageois","village","Tu n’as aucun pouvoir spécial. Le jour, écoute les autres, débats et vote pour éliminer celui que tu soupçonnes d’être un Loup-Garou.",12],
  ["voyante","Voyante","village","Chaque nuit, tu choisis un joueur et le site te révèle son rôle. Utilise ces infos pour guider le village, mais reste discrète : les Loups voudront te tuer.",1],
- ["sorciere","Sorcière","village","Tu as deux potions, à usage unique. Potion de vie : sauve la victime des Loups. Potion de poison : tue le joueur de ton choix. Chaque nuit, tu vois qui les Loups ont visé et tu décides d’utiliser une potion ou non.",1],
+ ["sorciere","Sorcière","village","Tu as deux potions, à usage unique. Potion de vie : sauve la victime des Loups. Potion de poison : tue le joueur de ton choix. Chaque nuit, tu vois qui les Loups ont visé et tu décides d’utiliser une potion ou non (une seule potion par nuit).",1],
  ["chasseur","Chasseur","village","Quand tu meurs, tu as droit à un dernier tir, et c’est toi qui fais tourner les roues. Roue 1 : bon ou mauvais chasseur. Bon chasseur : ton tir touche la cible que tu choisis. Mauvais chasseur : roue 2 pour savoir si ton tir part ; s’il part, tu choisis une cible et la roue 3 décide si c’est son voisin de gauche ou de droite qui est touché.",1],
  ["cupidon","Cupidon","switch","La première nuit, tu désignes deux joueurs (toi compris si tu veux) qui tombent amoureux. Ils se connaissent et gagnent ensemble : si l’un meurt, l’autre meurt de chagrin. Même dans des camps différents, leur but est de survivre tous les deux.",1],
  ["salvateur","Salvateur","village","Chaque nuit, tu choisis un joueur à protéger (toi compris) : les Loups ne pourront pas le tuer cette nuit-là. Attention, cela ne le protège ni du poison ni du vote du village.",1],
@@ -317,6 +329,7 @@ const EMO={loup:"🐺",villageois:"🧑‍🌾",voyante:"🔮",sorciere:"🧪",c
 const COLORS={wolf:"#c8463c",village:"#4caf7a",switch:"#f2c94c",solo:"#f28c28"};
 const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée"],["canicule","Canicule"]];
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let autoMode=false, engineOn=false, busy=false, autoSince=0, autoKey="";
 let cfg={roles:{loup:1,villageois:1},scen:[]}, players=[], plCount=0, gmCount=0, started=false;
 const total=()=>Object.values(cfg.roles).reduce((a,b)=>a+b,0);
 let hostUid=null, amGm=false, cfgLoaded=false;
@@ -326,11 +339,13 @@ const saveCfg=()=>setDoc(doc(db,"rooms",roomCode,"private","config"),cfg)
 
 function refreshStart(){
   $("h-total").textContent=`${total()} rôles pour ${plCount} joueurs`+(total()===plCount?" : parfait.":" : le nombre doit être identique.");
-  $("b-start").disabled=!(amGm&&gmCount===1&&plCount>=1&&total()===plCount);
+  const okGm=autoMode?(isHost()&&gmCount===0):(amGm&&gmCount===1);
+  $("b-start").disabled=!(okGm&&plCount>=1&&total()===plCount);
 }
 function renderHost(){
-  $("h-roles").innerHTML=ROLES.map(r=>`<div class="room"><span style="max-width:72%;color:${COLORS[r[2]]}">${EMO[r[0]]||""} ${r[1]}<br><small style="color:var(--mute)">${r[3]}</small></span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`).join("");
+  $("h-roles").innerHTML=ROLES.filter(r=>!(autoMode&&r[0]==="loupbav")).map(r=>`<div class="room"><span style="max-width:72%;color:${COLORS[r[2]]}">${EMO[r[0]]||""} ${r[1]}<br><small style="color:var(--mute)">${r[3]}</small></span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`).join("");
   $("h-scen").innerHTML=SCEN.map(c=>`<label class="room"><span>${c[1]}</span><input type="checkbox" style="width:auto" data-s="${c[0]}" ${cfg.scen.includes(c[0])?"checked":""}></label>`).join("");
+  $("h-autoopts").classList.toggle("hidden",!autoMode); $("h-day").value=cfg.dayLen||90; if(autoMode) cfg.roles.loupbav=0;
   refreshStart();
 }
 $("l-host").onclick=e=>{
@@ -339,6 +354,7 @@ $("l-host").onclick=e=>{
   cfg.roles[r[0]]=Math.max(0,Math.min(r[4],n)); renderHost(); saveCfg();
 };
 $("l-host").onchange=e=>{
+  if(e.target.id==="h-day"){cfg.dayLen=+e.target.value; saveCfg(); return}
   const k=e.target.dataset.s; if(!k) return;
   cfg.scen=e.target.checked?[...cfg.scen,k]:cfg.scen.filter(x=>x!==k); saveCfg();
 };
@@ -355,13 +371,17 @@ function enterGame(){
       render()}}));
   unsubs.push(onSnapshot(doc(db,"rooms",roomCode,"state","public"),d=>{if(d.exists()){ST=d.data();render()}}));
   if(gm){
-    $("g-gm").classList.remove("hidden"); $("g-gm").onclick=gmClick; $("g-gm").onchange=e=>{if(e.target.id==="lie")G.lie=e.target.checked}; resumeOrDeal();
-    unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"actions"),q=>{ACT={};q.docs.forEach(x=>ACT[x.id]=x.data());render(); hunterAuto()}));
+    $("g-gm").classList.remove("hidden"); $("g-gm").onclick=gmClick; $("g-gm").onchange=e=>{if(e.target.id==="lie")G.lie=e.target.checked};
     unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"secret"),q=>{
       $("g-all").innerHTML=q.docs.map(d=>{const x=d.data(),r=ROLES.find(r=>r[0]===x.role);
         return `<div class="room"><span>${esc(x.name)}</span><b style="color:${COLORS[r[2]]}">${r[1]}</b></div>`}).join("");
     }));
   }
+  if(eng()) startEngine();
+}
+function startEngine(){
+  if(engineOn) return; engineOn=true; resumeOrDeal();
+  unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"actions"),q=>{ACT={};q.docs.forEach(x=>ACT[x.id]=x.data());render(); hunterAuto(); mayorAuto()}));
 }
 // Seul le client du MJ tire les rôles : les autres joueurs ne les connaissent jamais à l'avance.
 async function deal(){
@@ -375,8 +395,8 @@ async function deal(){
     await Promise.all(pl.map((p,i)=>setDoc(doc(db,"rooms",code,"secret",p.id),
       {role:deck[i],name:p.name,mates:isW(deck[i])?wolves.filter(n=>n!==p.name):[]})));
     G={roles:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]])),couple:null,life:true,poison:true,protect:null,victim:null,poisoned:null,
-       steps:[],done:{},hunters:[],log:[],hidden:c.scen.includes("cache"),scen:c.scen,voteId:Date.now(),voteN:0,infected:[],conv:[],q:[],charmed:[],oiled:[],burn:[],shield:null,master:null,child:null,ange:null,foxLost:false,hammerLeft:1,maskMute:[],hammered:null,pendingBA:null,fakeSel:[],infectLeft:1,shuffle:false,word:"",muted:[],next:"day",rabbitLeft:3,dictLeft:1,rabbitHide:null,coup:null,alpha:null,lie:false,mayor:null};
-    ST={phase:"night",turn:1,alive:Object.fromEntries(pl.map(p=>[p.id,true])),dead:[],wake:null,wakeId:Date.now(),mute:[],silent:false,mutedU:[],pub:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]]).filter(x=>x[1]==="villageoisv")),hunter:null,vote:null,winner:null,final:null,
+       steps:[],done:{},hunters:[],log:[],hidden:c.scen.includes("cache"),scen:c.scen,voteId:Date.now(),voteN:0,dayLen:c.dayLen||90,mayorDead:null,infected:[],conv:[],q:[],charmed:[],oiled:[],burn:[],shield:null,master:null,child:null,ange:null,foxLost:false,hammerLeft:1,maskMute:[],hammered:null,pendingBA:null,fakeSel:[],infectLeft:1,shuffle:false,word:"",muted:[],next:"day",rabbitLeft:3,dictLeft:1,rabbitHide:null,coup:null,alpha:null,lie:false,mayor:null};
+    ST={phase:"night",turn:1,alive:Object.fromEntries(pl.map(p=>[p.id,true])),dead:[],wake:null,wakeId:Date.now(),gid:Date.now(),mayor:null,mayorDone:false,mute:[],silent:false,mutedU:[],pub:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]]).filter(x=>x[1]==="villageoisv")),hunter:null,vote:null,winner:null,final:null,
         msg:"La nuit tombe. Le MJ réveille les rôles un par un."};
     (await getDocs(collection(db,"rooms",code,"secret"))).docs.filter(d=>!G.roles[d.id]).forEach(d=>deleteDoc(d.ref));
     G.log.push("Scénarios : "+(c.scen.join(", ")||"aucun")); pl.forEach((p,i)=>G.log.push(`${p.name} : ${rn(deck[i])}`));
@@ -400,16 +420,16 @@ setInterval(()=>{const c=$("cd"); if(c&&ST?.vote) c.textContent=Math.max(0,Math.
 
 function render(){
   if(!started||!ST) return;
-  $("g-title").textContent={night:"La nuit tombe sur le village",day:"Le jour se lève",vote:"Le village vote",hunter:"Le chasseur tire",curieux:"Le Loup Curieux enquête",bienaimee:"La Sorcière Bien Aimée parle",over:"Partie terminée"}[ST.phase]||"";
+  $("g-title").textContent={night:"La nuit tombe sur le village",day:"Le jour se lève",vote:"Le village vote",hunter:"Le chasseur tire",curieux:"Le Loup Curieux enquête",bienaimee:"La Sorcière Bien Aimée parle",mayor:"Le Maire transmet son écharpe",over:"Partie terminée"}[ST.phase]||"";
   $("g-msg").textContent=ST.msg+(ST.winner?" Victoire : "+ST.winner+".":"");
-  document.body.dataset.phase=ST.phase; effects(); drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
+  document.body.dataset.phase=ST.phase; effects(); saveRecap(); drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
   $("b-replay").classList.toggle("hidden",!(isHost()&&ST.phase==="over")); applyMute();
 }
 function drawTable(){
   const pl=players.filter(p=>p.role==="player");
   $("g-table").innerHTML=pl.map((p,i)=>{const a=2*Math.PI*i/pl.length-Math.PI/2, d=ST?.dead.find(x=>x.uid===p.id);
     const r=d?.role||ST?.final?.[p.id]||ST?.pub?.[p.id];
-    return `<div class="p" style="position:absolute;left:${50+38*Math.cos(a)}%;top:${50+38*Math.sin(a)}%;transform:translate(-50%,-50%)"><img src="${p.avatar}" alt="" style="${d?"filter:grayscale(1);opacity:.5":""}"><div>${esc(p.name)}${ST?.mutedU?.includes(p.id)?" 🔇":""}${ST?.mayor===p.id&&ST.alive[p.id]?" 🎖️":""}${r?`<br><small>${EMO[r]||""} ${rn(r)}</small>`:""}</div></div>`}).join("");
+    return `<div class="p" style="position:absolute;left:${50+38*Math.cos(a)}%;top:${50+38*Math.sin(a)}%;transform:translate(-50%,-50%)"><img referrerpolicy="no-referrer" src="${p.avatar}" alt="" style="${d?"filter:grayscale(1);opacity:.5":""}"><div>${esc(p.name)}${ST?.mutedU?.includes(p.id)?" 🔇":""}${ST?.mayor===p.id&&ST.alive[p.id]?" 🎖️":""}${r?`<br><small>${EMO[r]||""} ${rn(r)}</small>`:""}</div></div>`}).join("");
 }
 function renderRole(){
   if(IGM){$("g-role").innerHTML="<p>Tu es le Maître du jeu.</p>";return}
@@ -420,21 +440,22 @@ function renderAct(){
   const el=$("g-act"); if(IGM||!mySecret){el.classList.add("hidden");return}
   if(lastKey!==key()){lastKey=key();sel=[];saveW=false}
   const wr=ST.wake?.role, r=(wr==="loup"&&(mySecret.wolfx||isW(mySecret.role)))?"loup":mySecret.role, ok=()=>sent===key(), others=alive().filter(u=>u!==me.uid); let h="";
-  if(ST.phase==="over") h="La partie est terminée.";
+  if(ST.phase==="over") h="La partie est terminée."+(eng()&&G?`<div class="row"><button data-a="pdf">Télécharger le journal (PDF)</button></div>`:"");
   else if(ST.phase==="hunter"&&ST.hunter.uid===me.uid){const H=ST.hunter, wh=t=>`<p>${t}</p><button data-spin="${H.stage}">🎡 Faire tourner la roue</button>`;
     h=ok()?"La roue tourne…":H.stage==="w1"?wh("Tu es mort, mais tu as droit à un dernier tir ! Fais tourner la roue : bon ou mauvais chasseur ?")
       :H.stage==="w2"?wh("Mauvais chasseur… Fais tourner la roue : ton tir part-il, ou est-il raté ?")
       :H.stage==="w3"?wh(`Tu vises ${esc(nm(H.target))}. Fais tourner la roue : c’est son voisin de gauche ou de droite qui sera touché ?`)
       :`<p>${H.good?"Bon chasseur : ton tir touchera ta cible.":"Ton tir part ! Choisis ta cible (la roue pourra dévier le tir)."}</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Tirer</button>`}
+  else if(ST.phase==="mayor"&&ST.mm.uid===me.uid) h=ok()?"Choix envoyé.":`<p>Tu étais Maire : choisis qui reçoit l’écharpe (voix double) :</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Valider</button>`;
   else if(ST.phase==="bienaimee"&&ST.ba.uid===me.uid) h=ok()?"Choix envoyé.":`<p>Désigne une personne dont le MJ citera le rôle :</p><div class="row">${alive().map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Valider</button>`;
   else if(ST.phase==="curieux"&&ST.cur.uid===me.uid) h=ok()?"Choix envoyé.":`<p>Choisis un électeur dont découvrir le rôle :</p><div class="row">${ST.cur.opts.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${sel.length?"":"disabled"}>Valider</button>`;
   else if(!ST.alive[me.uid]) h="Tu es mort(e). Tu observes la partie en silence.";
   else if(ST.phase==="vote"){const v=myVote?.id===ST.vote.id?myVote:null; if(v)myVote=v;
-    h=`<p>Qui éliminer ?${ST.mayor===me.uid?" (ta voix compte double)":""} <b id="cd"></b></p><div class="row">${others.map(u=>btn(u,"data-vote")).join("")}</div>`;}
+    h=`<p>${ST.vote.kind==="mayor"?"Qui élire Maire ? (sa voix comptera double)":"Qui éliminer ?"}${ST.mayor===me.uid&&ST.vote.kind!=="mayor"?" (ta voix compte double)":""} <b id="cd"></b></p><div class="row">${others.map(u=>btn(u,"data-vote")).join("")}</div>`;}
   else if(ST.phase==="night"&&(r==="petitefille"?wr==="loup":wr===r)){
     if(ok()) h="Choix envoyé. Attends que le MJ te rendorme.";
     else{const max=ST.wake.max||1, w=mySecret.witch, ab=mySecret.ability;
-      h=r==="sorciere"?`<p>${w?.victim?`Les Loups ont visé <b>${esc(w.victim)}</b>.`:"Personne n'a été visé."}</p>${w?.victim&&w.life?`<button class="${saveW?"":"alt"}" data-save="1">Potion de vie : sauver</button> `:""}${w?.poison?`<p>Potion de poison (optionnel) :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div>`:""}<button data-ok="1">Confirmer</button>`
+      h=r==="sorciere"?`<p>${w?.victim?`Les Loups ont visé <b>${esc(w.victim)}</b>.`:"Personne n'a été visé."}</p>${w?.victim&&w.life?`<button class="${saveW?"":"alt"}" data-save="1">Potion de vie : sauver</button> `:""}${w?.poison&&!saveW?`<p>Une seule potion par nuit. Potion de poison (optionnel) :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div>`:""}<button data-ok="1">Confirmer</button>`
         
         :r==="infect"?`<p>Victime des Loups : <b>${esc(ab?.victim||"aucune")}</b>. Infections restantes : ${ab?.left}</p>${ab?.left>0&&ab?.victim?`<button class="${saveW?"":"alt"}" data-save="1">Infecter cette victime</button> `:""}<button data-ok="1">Confirmer</button>`
         :r==="pyro"?`<p>Huile jusqu’à 2 joueurs, ou embrase ceux déjà huilés :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button class="${saveW?"":"alt"}" data-save="1">Embraser</button> <button data-ok="1">Confirmer</button>`
@@ -444,17 +465,18 @@ function renderAct(){
         :r==="dictateur"?`<p>Coups d’État restants : ${ab?.left}</p><button class="${saveW?"":"alt"}" data-save="1">Faire un coup d’État</button><p>Cible :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${!saveW||sel.length?"":"disabled"}>Confirmer</button>`
         :r==="petitefille"?`Tu observes les Loups. Cibles évoquées : ${[...new Set(Object.values(WOLF).map(a=>esc(nm(a.targets[0]))))].join(", ")||"aucune"}.`
         :`<p>${max>1?"Choisis "+max+" joueurs":"Choisis un joueur"} :</p><div class="row">${(["salvateur","cupidon","detective"].includes(r)?alive():others).map(u=>btn(u,"data-t")).join("")}</div>${r==="loup"?`<p>Choix de la meute : ${Object.entries(WOLF).map(([u,a])=>esc(nm(u))+" → "+esc(nm(a.targets[0]))).join(", ")||"aucun"}</p>`:""}<button data-ok="1" ${sel.length===max?"":"disabled"}>Confirmer</button>`;}
-  } else h=ST.phase==="night"?"Tu dors… ferme les yeux.":ST.phase==="day"?"Discutez, puis le MJ lancera le vote.":"";
+  } else h=ST.phase==="night"?"Tu dors… ferme les yeux.":ST.phase==="day"?(ST.turn===1&&!ST.mayorDone?"Discutez : on va élire un Maire (voix double), puis le village votera.":"Discutez : le vote va être lancé."):"";
   el.innerHTML=h; el.classList.toggle("hidden",!h);
 }
 $("g-act").onclick=async e=>{
   const b=e.target.closest("button"); if(!b||!ST) return; const d=b.dataset, max=ST.phase==="night"?(ST.wake?.max||1):1;
   try{
     if(d.a==="replay"){await replay(); return}
+    if(d.a==="pdf"){makePdf(); return}
     if(d.vote){myVote={id:ST.vote.id,t:d.vote}; await setDoc(doc(db,"rooms",roomCode,"votes",me.uid),{id:ST.vote.id,target:d.vote})}
     else if(d.spin){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,stage:d.spin,targets:[],save:false,wolf:false}); sent=key()}
-    else if(d.save) saveW=!saveW;
-    else if(d.t) sel=sel.includes(d.t)?sel.filter(x=>x!==d.t):[...sel,d.t].slice(-max);
+    else if(d.save){saveW=!saveW; if(saveW&&mySecret.role==="sorciere") sel=[]}
+    else if(d.t){if(mySecret.role==="sorciere") saveW=false; sel=sel.includes(d.t)?sel.filter(x=>x!==d.t):[...sel,d.t].slice(-max)}
     else if(d.ok){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,stage:ST.hunter?.stage||null,targets:sel,save:saveW,wolf:ST.wake?.role==="loup"}); sent=key()}
   }catch(err){fail(err)}
   renderAct();
@@ -474,7 +496,7 @@ function renderGM(){
     h=G.steps.map(s=>{const cur=ST.wake?.role===s, a=holders(s).map(u=>ACT[u]?.wakeId===ST.wakeId&&cur?nm(u)+" → "+(ACT[u].targets.map(nm).join(" + ")||"—")+(ACT[u].save?" (sauve)":""):"…");
       return `<div class="room"><span>${rn(s)} : ${G.done[s]?"fait":cur?a.join(" ; "):"en attente"}</span>${G.done[s]?"":cur?`<button data-a="ok" data-s="${s}" ${ready(s)?"":"disabled"}>Rendormir</button>`:`<button data-a="wake" data-s="${s}" ${ST.wake?"disabled":""}>Réveiller</button>`}</div>`}).join("");
     if(G.steps.every(s=>G.done[s])) h+=`<div class="row"><button data-a="dawn">Lever le jour</button></div>`;
-  } else if(ph==="day") h=`<div class="row"><button data-a="vote">Lancer le vote (10 s)</button></div>`;
+  } else if(ph==="day") h=`<div class="row">${ST.turn===1&&!ST.mayorDone?`<button data-a="mvote">Élire le Maire (10 s)</button>`:`<button data-a="vote">Lancer le vote (10 s)</button>`}</div>`;
   else if(ph==="vote") h=`<p>Vote en cours : <b id="cd"></b></p><button data-a="close">Clore le vote maintenant</button>`;
   else if(ph==="hunter") h=`<p>Chasseur ${esc(nm(ST.hunter.uid))} : la roue est entre ses mains (étape ${ST.hunter.stage}).</p>`;
   if(ph==="night"&&Object.values(G.roles).includes("pronostiqueur")) h+=`<label class="room"><span>Le Pronostiqueur ment</span><input type="checkbox" id="lie" style="width:auto" ${G.lie?"checked":""}></label>`;
@@ -489,7 +511,7 @@ function renderGM(){
 }
 async function gmClick(e){
   const b=e.target.closest("button[data-a]"); if(!b) return; const a=b.dataset.a, s=b.dataset.s;
-  try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="close")await closeVote(); if(a==="cur")await resolveCurieux(); if(a==="cite")await cite();
+  try{ if(a==="wake")await wake(s); if(a==="ok")await endStep(s); if(a==="dawn")await dawn(); if(a==="vote")await startVote(); if(a==="mvote")await startVote("mayor"); if(a==="close")await closeVote(); if(a==="cur")await resolveCurieux(); if(a==="cite")await cite();
     if(a==="fake"){const fs=G.fakeSel||[]; G.fakeSel=fs.includes(s)?fs.filter(x=>x!==s):[...fs,s].slice(-2); renderGM()} if(a==="pdf")makePdf();
     if(a==="word"||a==="forgot"){const bv=alive().find(u=>G.roles[u]==="loupbav");
       if(a==="word"){G.word=$("word").value; await updateDoc(sd(bv),{info:"Mot du jour à dire : "+G.word})}
@@ -513,7 +535,7 @@ async function endStep(s){
   if(s==="loup"){G.victim=t[0]; G.log.push(`Les Loups visent ${nm(t[0])}`);}
   if(s==="sorciere"){const x=a[0];
     if(x.save&&G.life&&G.victim){G.life=false; G.log.push(`Sorcière sauve ${nm(G.victim)}`); G.victim=null}
-    if(x.targets[0]&&G.poison){G.poison=false; G.poisoned=x.targets[0]; G.log.push(`Sorcière empoisonne ${nm(x.targets[0])}`)}}
+    if(x.targets[0]&&G.poison&&!x.save){G.poison=false; G.poisoned=x.targets[0]; G.log.push(`Sorcière empoisonne ${nm(x.targets[0])}`)}}
   const camp=u=>isWU(u)?"w":["ange","bouffon"].includes(G.roles[u])?"s":"v";
   if(s==="detective"){const same=camp(t[0])===camp(t[1]); G.log.push(`Détective compare ${nm(t[0])} et ${nm(t[1])} : ${same?"Oui":"Non"}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} et ${nm(t[1])} sont du même camp ? ${same?"Oui":"Non"}.`});}
   if(s==="pronostiqueur"){const good=camp(t[0])!=="w", shown=G.lie?!good:good; G.log.push(`Pronostiqueur : ${nm(t[0])} = ${shown?"Gentil":"Méchant"}${G.lie?" (mensonge)":""}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est ${shown?"Gentil":"Méchant"}.`});}
@@ -545,6 +567,7 @@ function kill(u,cause){
   ST.dead.push({uid:u,name:nm(u),role:G.hidden?"":G.roles[u]}); G.log.push(`${nm(u)} (${rn(G.roles[u])}) meurt : ${cause}`);
   if(G.roles[u]==="chasseur") G.hunters.push(u);
   if(G.roles[u]==="trublion") G.shuffle=true;
+  if(u===G.mayor) G.mayorDead=u;
   if(G.roles[u]==="sorciere"&&G.scen.includes("sorciere")) G.pendingBA=u;
   if(u===G.master&&G.child&&ST.alive[G.child]&&G.roles[G.child]==="enfant"){G.roles[G.child]="loup"; G.conv.push(G.child); G.log.push(`${nm(G.child)} (Enfant sauvage) devient Loup-Garou`); G.q.push([G.child,{role:"loup",info:"Ton maître est mort : tu deviens Loup-Garou !"}])}
   if(G.couple?.includes(u)) G.couple.filter(x=>x!==u).forEach(x=>kill(x,"chagrin d’amour"));
@@ -565,6 +588,9 @@ async function after(next){
   ST.hunter=null; await flush();
   if(G.pendingBA&&alive().length>1){const w=G.pendingBA; G.pendingBA=null; ST.phase="bienaimee"; ST.ba={uid:w}; ST.wakeId++; G.next=next; await push(); return}
   G.pendingBA=null;
+  if(G.mayorDead&&alive().length>0){const m=G.mayorDead; G.mayorDead=null; G.mayor=null; ST.mayor=null; ST.phase="mayor"; ST.mm={uid:m}; ST.wakeId++; G.next=next;
+    ST.msg=`${nm(m)} était Maire : il désigne son successeur.`; await push(); return}
+  G.mayorDead=null;
   if(G.shuffle) await reshuffle();
   const ag=G.ange; if(ag?.kind==="dechu"&&!ag.done&&next==="night"&&ST.turn===1){ag.done=true;
     if(!ST.alive[ag.t]){ST.phase="over"; ST.winner="l’Ange déchu"; ST.final=G.roles; G.log.push("Victoire : l’Ange déchu"); await push(); return}
@@ -591,17 +617,17 @@ async function dawn(){
   const bear=alive().find(u=>G.roles[u]==="ours"); if(bear) ST.msg+=` L’ours grogne ${nbs(bear).filter(u=>u!==bear&&isWU(u)).length} fois.`;
   await after("day");
 }
-async function startVote(){
-  if(G.coup){const {by,t}=G.coup; G.coup=null;
+async function startVote(kind){
+  if(G.coup&&kind!=="mayor"){const {by,t}=G.coup; G.coup=null;
     if(ST.alive[by]&&ST.alive[t]){ST.vote=null;
       if(isWU(t)){kill(t,"coup d’État"); G.mayor=by; ST.mayor=by; ST.msg=`Coup d’État ! ${nm(by)} élimine ${nm(t)}, un Loup-Garou, et devient Maire : sa voix comptera double.`}
       else{kill(t,"coup d’État"); kill(by,"coup d’État raté"); ST.msg=`Coup d’État raté : ${nm(by)} a éliminé un innocent (${nm(t)}) et meurt.`}
       return after("night")}}
-  ST.phase="vote"; ST.vote={id:++G.voteId,end:Date.now()+10000}; await push();
+  ST.phase="vote"; ST.vote={id:++G.voteId,end:Date.now()+10000,kind:kind||"elim"}; await push();
   clearTimeout(timer); timer=setTimeout(()=>closeVote().catch(fail),10800);
 }
 async function closeVote(){
-  if(ST.phase!=="vote") return; clearTimeout(timer); G.voteN++; const vid=ST.vote.id;
+  if(ST.phase!=="vote") return; clearTimeout(timer); if(ST.vote.kind==="mayor") return closeMayor(); G.voteN++; const vid=ST.vote.id;
   const q=await getDocs(collection(db,"rooms",roomCode,"votes")), c={};
   q.docs.forEach(d=>{const v=d.data(); if(v.id===ST.vote.id&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+(d.id===G.mayor?2:1)});
   const max=Math.max(0,...Object.values(c)), top=Object.keys(c).filter(u=>c[u]===max);
@@ -621,7 +647,7 @@ async function closeVote(){
   ST.msg="Égalité : personne n'est éliminé."; ST.vote=null; await after("night");
 }
 async function hunterAuto(){
-  if(!IGM||!G||!ST||ST.phase!=="hunter") return;
+  if(!eng()||!G||!ST||ST.phase!=="hunter") return;
   const H=ST.hunter, a=ACT[H.uid]; if(!a||a.wakeId!==ST.wakeId||a.stage!==H.stage) return;
   const k=ST.wakeId+H.stage; if(G.hk===k) return; G.hk=k;
   const h=H.uid, wheel=l=>{ST.fx={k:"wheel",label:l,id:Date.now()}};
@@ -655,7 +681,7 @@ async function resolveCurieux(){
 }
 function makePdf(){
   const {jsPDF}=window.jspdf, d=new jsPDF(); let y=20;
-  d.setFontSize(16); d.text("Loup-Garou de DoogBarrow : journal de partie",15,y); y+=10; d.setFontSize(10);
+  d.setFontSize(16); d.text("WolfParty : journal de partie",15,y); y+=10; d.setFontSize(10);
   [`Date : ${new Date().toLocaleString("fr-FR")}`,`Vainqueur : ${ST.winner}`,"",...G.log].forEach(l=>
     d.splitTextToSize(l,180).forEach(t=>{if(y>280){d.addPage();y=20} d.text(t,15,y); y+=6}));
   d.save("journal-loup-garou.pdf");
@@ -734,7 +760,7 @@ function ensureCfg(){
   unsubs.push(()=>cfgUnsub&&cfgUnsub());
 }
 async function kicked(){
-  localStorage.removeItem("lg-room"); roomCode=null; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false;
+  localStorage.removeItem("lg-room"); roomCode=null; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; engineOn=false; wolfSub=false;
   await closeVoice(); goHome(); fail({message:"Tu as été expulsé de la room."});
 }
 async function resumeOrDeal(){
@@ -792,9 +818,98 @@ function effects(){
     if(fresh) banner(`<span class="spin">🎡</span><small>${f.label||""}</small>`,"coin")}
 }
 $("b-snd").onclick=()=>{sound=!sound; $("b-snd").textContent=sound?"🔊":"🔇"};
+const eng=()=>IGM||(autoMode&&isHost());
+$("l-auto").onchange=e=>updateDoc(doc(db,"rooms",roomCode),{auto:e.target.checked}).catch(fail);
+async function closeMayor(){
+  const vid=ST.vote.id, q=await getDocs(collection(db,"rooms",roomCode,"votes")), c={};
+  q.docs.forEach(d=>{const v=d.data(); if(v.id===vid&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+1});
+  const max=Math.max(0,...Object.values(c)), top=Object.keys(c).filter(u=>c[u]===max);
+  ST.vote=null; ST.phase="day"; ST.mayorDone=true;
+  if(top.length){const m=top[Math.random()*top.length|0]; G.mayor=m; ST.mayor=m; G.log.push("Maire élu : "+nm(m));
+    ST.msg=`${nm(m)} est élu Maire : sa voix compte double jusqu’à sa mort.`+(top.length>1?" (égalité tirée au sort)":"")}
+  else ST.msg="Personne n’a voté : pas de Maire pour le moment.";
+  await push();
+}
+async function mayorAuto(){
+  if(!eng()||!G||!ST||ST.phase!=="mayor") return; const a=ACT[ST.mm.uid]; if(a?.wakeId!==ST.wakeId) return;
+  const k="m"+ST.wakeId; if(G.mk===k) return; G.mk=k; const t=a.targets[0];
+  if(t&&ST.alive[t]){G.mayor=t; ST.mayor=t; ST.msg=`${nm(ST.mm.uid)} transmet l’écharpe de Maire à ${nm(t)}.`; G.log.push("Nouveau Maire : "+nm(t))}
+  ST.mm=null; await after(G.next);
+}
+// MJ automatique : le navigateur de l'host joue le rôle du MJ
+async function autoTick(){
+  if(!autoMode||!eng()||!G||!ST||busy||!started) return; busy=true;
+  try{
+    const k=ST.phase+"|"+ST.wakeId+"|"+(ST.vote?.id||0)+"|"+ST.turn+"|"+(ST.wake?.role||""); if(k!==autoKey){autoKey=k; autoSince=Date.now()}
+    const el=Date.now()-autoSince, ph=ST.phase;
+    if(ph==="night"){
+      if(!ST.wake){const nx=G.steps.find(x=>!G.done[x]); if(nx) await wake(nx); else await dawn()}
+      else{const x=ST.wake.role; if(ready(x)) await endStep(x); else if(el>45000){G.done[x]=true; ST.wake=null; await push()}}
+    } else if(ph==="day"){ if(el>(G.dayLen||90)*1000) await startVote(ST.turn===1&&!ST.mayorDone?"mayor":undefined) }
+    else if(ph==="curieux"){const a=ACT[ST.cur.uid]; if(a?.wakeId===ST.wakeId) await resolveCurieux(); else if(el>60000){ST.cur=null; await after(G.next)}}
+    else if(ph==="bienaimee"){const a=ACT[ST.ba.uid];
+      if(a?.wakeId===ST.wakeId){const real=G.roles[a.targets[0]]; G.fakeSel=[...new Set(alive().map(u=>G.roles[u]))].filter(r=>r!==real).sort(()=>Math.random()-.5).slice(0,2); await cite()}
+      else if(el>60000){ST.ba=null; await after(G.next)}}
+    else if(ph==="mayor"){if(el>45000){ST.mm=null; await after(G.next)}}
+    else if(ph==="hunter"&&el>90000){ST.hunter=null; await after(G.next)}
+  }catch(e){console.error(e)}finally{busy=false}
+}
+setInterval(autoTick,1000);
+// ---------- Comptes, avatar, récap ----------
+function drawImg(src){
+  const im=new Image(); im.referrerPolicy="no-referrer";
+  im.onload=()=>{ctx.fillStyle="#fff"; ctx.fillRect(0,0,160,160); const r=Math.max(160/im.width,160/im.height); ctx.drawImage(im,(160-im.width*r)/2,(160-im.height*r)/2,im.width*r,im.height*r)};
+  im.src=src;
+}
+$("f-img").onchange=e=>{const f=e.target.files[0]; if(!f) return; chosen=null; const rd=new FileReader(); rd.onload=()=>drawImg(rd.result); rd.readAsDataURL(f)};
+$("b-gphoto").onclick=()=>{chosen=me.photoURL; drawImg(me.photoURL)};
+function openProfile(u){
+  $("b-gphoto").classList.toggle("hidden",u.isAnonymous||!u.photoURL);
+  if(!u.isAnonymous){if(!$("pseudo").value) $("pseudo").value=u.displayName||""; if(u.photoURL){chosen=u.photoURL; drawImg(u.photoURL)}}
+  show("s-profile");
+}
+function renderAcct(){
+  if(!me) return;
+  $("acct").innerHTML=me.isAnonymous
+    ?`<span>👤 Compte temporaire (sans compte)</span><button id="a-google">Se connecter avec Google</button><button class="alt" id="a-out">Se déconnecter</button>`
+    :`<span>✅ ${esc(me.displayName||me.email||"Compte Google")}</span><button class="alt" id="a-recap">Récap</button><button class="alt" id="a-out">Se déconnecter</button>`;
+}
+$("acct").onclick=async e=>{
+  const id=e.target.id;
+  if(id==="a-google") signInWithPopup(auth,new GoogleAuthProvider()).catch(fail);
+  if(id==="a-recap") openRecap();
+  if(id==="a-out"){ if(me.isAnonymous) await deleteDoc(doc(db,"users",me.uid)).catch(()=>{}); localStorage.removeItem("lg-room"); await signOut(auth) }
+};
+$("b-recap-back").onclick=()=>goHome();
+function didWin(role,w){
+  if(!role||!w) return null; const camp=(ROLES.find(r=>r[0]===role)||[])[2];
+  if(w.includes("les Loups-Garous")) return isW(role);
+  if(w.startsWith("le village")) return camp==="village"||camp==="switch";
+  if(w.includes("amoureux")) return null;
+  return w.toLowerCase().includes(rn(role).toLowerCase());
+}
+let lastSaved=0;
+function saveRecap(){
+  if(!ST||ST.phase!=="over"||!ST.gid||!me||me.isAnonymous||lastSaved===ST.gid) return; lastSaved=ST.gid;
+  const fin=ST.final||{}, role=IGM?"gm":(fin[me.uid]||mySecret?.role||null);
+  const rec={at:Date.now(),room:roomCode,winner:ST.winner||"",role,survived:!!ST.alive?.[me.uid],win:IGM?null:didWin(role,ST.winner),
+    players:Object.keys(fin).map(u=>({name:nm(u),role:fin[u]})),log:(eng()&&G)?G.log:[]};
+  setDoc(doc(db,"users",me.uid,"games",String(ST.gid)),rec).catch(e=>console.error(e));
+}
+async function openRecap(){
+  show("s-recap"); $("recap-list").textContent="Chargement…";
+  try{
+    const q=await getDocs(collection(db,"users",me.uid,"games")), gs=q.docs.map(d=>d.data()).sort((a,b)=>b.at-a.at);
+    $("recap-list").innerHTML=gs.length?gs.map(g=>{
+      const r=g.role==="gm"?"Maître du jeu":g.role?`${EMO[g.role]||""} ${rn(g.role)}`:"?";
+      const res=g.win===true?"🏆 Victoire":g.win===false?"💀 Défaite":g.role==="gm"?"🎙️ MJ":"—";
+      return `<details class="room" style="display:block"><summary>${new Date(g.at).toLocaleString("fr-FR")} · ${r} · ${res}</summary><p>Vainqueur : ${esc(g.winner)}</p><p>${(g.players||[]).map(p=>esc(p.name)+" ("+rn(p.role)+")").join(", ")}</p></details>`}).join("")
+      :"Aucune partie enregistrée pour l’instant.";
+  }catch(e){fail(e)}
+}
 const replay=()=>updateDoc(doc(db,"rooms",roomCode),{status:"lobby"}).catch(fail);
 async function backToLobby(){
-  const c=roomCode; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; wolfSub=false; ACT={}; WOLF={}; IGM=false; applyMute(); // le vocal reste actif entre deux parties
+  const c=roomCode; unsubs.forEach(u=>u()); unsubs=[]; started=false; ST=G=mySecret=null; engineOn=false; wolfSub=false; ACT={}; WOLF={}; IGM=false; applyMute(); // le vocal reste actif entre deux parties
   await joinRoom(c);
 }
 </script>
