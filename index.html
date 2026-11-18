@@ -3,68 +3,141 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1b1030">
 <title>WolfParty</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Almendra:wght@700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Outfit:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#1c2536;--panel:#273550;--ink:#ece9f6;--mute:#9aa6c0;--moon:#f2c94c;--wolf:#c8463c;--ok:#4caf7a;color-scheme:dark}
+:root{
+  --nuit:#1b1030; --prune:#2e1b4d; --prune2:#43286e; --lune:#f7f1ff; --brume:#b9a8d6;
+  --lanterne:#ffc857; --lanterne-ombre:#b8841f; --baie:#ff5fa2; --sang:#ff4d5e; --ok:#6fe0b0; --ombre:#120a22;
+  --bg:var(--nuit); --panel:var(--prune); --ink:var(--lune); --mute:var(--brume); --moon:var(--lanterne); --wolf:var(--sang);
+  --sky1:#1b1030; --sky2:#3a1f63;
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Nunito,sans-serif}
-main{max-width:560px;margin:0 auto;padding:24px 16px 96px}
-body{transition:background .8s}
-body[data-phase="night"]{background:#0c1220}
-body[data-phase="day"],body[data-phase="vote"]{background:#33476b}
-.big{font-size:2.2rem;vertical-align:middle}
-#fx{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:5rem;pointer-events:none;opacity:0;z-index:20;background:rgba(0,0,0,.45);text-align:center}
-#fx.show{animation:fxin 2.2s ease}
-#fx small{font-size:1.5rem;color:var(--moon);font-family:Almendra,serif}
-@keyframes fxin{0%{opacity:0}15%{opacity:1}80%{opacity:1}100%{opacity:0}}
-.spin{display:inline-block;animation:spinw 1.4s cubic-bezier(.2,.7,.2,1)}
-@keyframes spinw{from{transform:rotate(0)}to{transform:rotate(1080deg)}}
-.card{animation:reveal .7s ease}
-@keyframes reveal{from{transform:rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
-@media (max-width:480px){main{padding:12px 10px 110px}h1{font-size:1.7rem}.panel{padding:12px}#g-table .p{font-size:.72rem}#g-table .p img{width:40px;height:40px}#voice{left:8px;right:8px;justify-content:space-between}}
-.coin{display:inline-block;animation:flip 1.2s ease-out}
-@keyframes flip{from{transform:rotateY(0)}to{transform:rotateY(1440deg)}}
-@media (prefers-reduced-motion:reduce){.coin,.spin,.card{animation:none}body{transition:none}}
-h1,h2{font-family:Almendra,serif;margin:0 0 12px;color:var(--moon)}
-h1{font-size:2.2rem;text-align:center;margin-top:24px}
-.panel{background:var(--panel);border-radius:14px;padding:18px;margin-bottom:16px}
-button{min-height:44px;font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 16px;background:var(--moon);color:#1c2536;cursor:pointer}
-button.alt{background:transparent;color:var(--ink);border:2px solid var(--mute)}
-button:disabled{opacity:.4;cursor:not-allowed}
-button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
-input{font:inherit;padding:10px 12px;border-radius:10px;border:2px solid var(--mute);background:var(--bg);color:var(--ink);width:100%}
+html{background:linear-gradient(180deg,var(--sky1),var(--sky2)) fixed;min-height:100%}
+html:has(body[data-phase="night"]){--sky1:#0b0619;--sky2:#241046}
+html:has(body[data-phase="day"]){--sky1:#4a2c7c;--sky2:#c0577a}
+html:has(body[data-phase="vote"]){--sky1:#3d1a55;--sky2:#8a2f5a}
+body{margin:0;min-height:100vh;color:var(--ink);font:400 1rem/1.55 Outfit,system-ui,sans-serif;background:transparent}
+
+/* Décor : forêt et lune (la lune devient un soleil de l’aube pendant le jour) */
+body::before{content:"";position:fixed;left:0;right:0;bottom:0;height:140px;z-index:-1;pointer-events:none;opacity:.92;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 140'%3E%3Cg fill='%23120a22'%3E%3Cpath d='M-10 140 38 40 86 140Z'/%3E%3Cpath d='M50 140 92 70 134 140Z'/%3E%3Cpath d='M110 140 168 20 226 140Z'/%3E%3Cpath d='M200 140 246 64 292 140Z'/%3E%3Cpath d='M262 140 318 34 374 140Z'/%3E%3Cpath d='M350 140 392 76 434 140Z'/%3E%3Crect y='128' width='420' height='12'/%3E%3C/g%3E%3C/svg%3E") repeat-x left bottom/420px 140px}
+body::after{content:"";position:fixed;top:-70px;right:-50px;width:240px;height:240px;border-radius:50%;z-index:-1;pointer-events:none;
+  background:radial-gradient(circle at 36% 34%,#fffbe8,#ffe08a 55%,#f2b84a);box-shadow:0 0 100px 36px rgba(255,200,87,.22);
+  transition:top .9s ease,box-shadow .9s ease;animation:rise 1.6s cubic-bezier(.2,.8,.2,1) both}
+body[data-phase="day"]::after,body[data-phase="vote"]::after{top:70px;background:radial-gradient(circle at 40% 40%,#fff3c2,#ffb347 60%,#ff7a59);box-shadow:0 0 120px 50px rgba(255,140,80,.3)}
+@keyframes rise{from{transform:translateY(240px);opacity:0}to{transform:none;opacity:1}}
+
+main{max-width:640px;margin:0 auto;padding:8px 16px 170px}
+.hidden{display:none!important}
+
+/* Titres */
+.brand{text-align:center;padding:28px 0 20px}
+h1{margin:0;font:400 clamp(2.7rem,12vw,4rem)/1 'Bagel Fat One','Arial Rounded MT Bold',system-ui,sans-serif;letter-spacing:.01em;color:var(--lune);
+  text-shadow:0 4px 0 var(--baie),0 8px 0 var(--ombre);animation:title 1s .6s both}
+.brand p{margin:14px 0 0;color:var(--brume);animation:title 1s .9s both}
+@keyframes title{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+h2{margin:0 0 12px;font:400 1.45rem/1.15 'Bagel Fat One','Arial Rounded MT Bold',system-ui,sans-serif;color:var(--lune)}
+.hint{margin:0 0 14px;color:var(--brume)}
+small{font-size:.85rem}
+
+/* Panneaux */
+.panel{position:relative;background:var(--prune);border:2px solid rgba(247,241,255,.12);border-radius:20px;padding:20px;margin-bottom:18px;box-shadow:0 6px 0 var(--ombre)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
 .row>*{flex:1 1 auto}
-.hidden{display:none}
-canvas{background:#fff;border-radius:50%;touch-action:none;width:160px;height:160px;border:4px solid var(--moon)}
-.colors{display:flex;gap:6px;flex-wrap:wrap}
-.colors i{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid var(--ink)}
-.room{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #3a4a68}
-.players{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px}
-.p{text-align:center;font-size:.9rem}
-.p img{width:72px;height:72px;border-radius:50%;border:3px solid var(--mute);object-fit:cover;background:#fff}
-.p.gm img{border-color:var(--wolf)}
-.err{color:#ff9b8f;min-height:1.4em}
-.code{font-family:Almendra,serif;font-size:1.6rem;color:var(--moon);letter-spacing:.15em}
-#g-table{position:relative;width:100%;max-width:360px;aspect-ratio:1;margin:0 auto}
-#g-table .p img{width:52px;height:52px}
-.card{border-left:8px solid var(--mute);padding-left:14px}
-#voice{position:fixed;right:12px;bottom:12px;background:var(--panel);padding:8px 12px;border-radius:12px;display:flex;gap:8px;align-items:center;font-size:.85rem;z-index:5}
-#voice.hidden{display:none}
-footer{text-align:center;color:var(--mute);padding:8px 16px 32px;font-size:.9rem}
-footer a{color:var(--moon)}
+.room{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:2px dashed rgba(247,241,255,.14)}
+.room:last-child{border-bottom:0}
+.room summary{cursor:pointer}
+label{display:block}
+.err{margin:0 0 12px}
+.err:not(:empty){background:rgba(255,77,94,.15);border-left:5px solid var(--sang);padding:10px 14px;border-radius:10px;color:#ffd9dc}
+
+/* Boutons : épais, ils s’enfoncent quand on appuie */
+button{min-height:46px;padding:10px 18px;border:0;border-radius:14px;background:var(--lanterne);color:#2a1648;font:600 1rem Outfit,system-ui,sans-serif;
+  box-shadow:0 4px 0 var(--lanterne-ombre);cursor:pointer;transition:transform .08s,box-shadow .08s,filter .15s}
+button:hover:not(:disabled){filter:brightness(1.07)}
+button:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 var(--lanterne-ombre)}
+button.alt{background:transparent;color:var(--lune);box-shadow:inset 0 0 0 2px var(--brume)}
+button.alt:active:not(:disabled){transform:translateY(2px);box-shadow:inset 0 0 0 2px var(--brume)}
+button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+:focus-visible{outline:3px solid var(--baie);outline-offset:3px}
+
+/* Champs */
+input,select{width:100%;padding:10px 12px;font:inherit;color:var(--lune);background:var(--prune2);border:2px solid transparent;border-radius:12px}
+input::placeholder{color:var(--brume)}
+input:focus-visible,select:focus-visible{outline:none;border-color:var(--lanterne);box-shadow:0 0 0 3px rgba(255,200,87,.3)}
+input[type=checkbox]{width:auto;accent-color:var(--lanterne)}
+input[type=file]{padding:8px}
+canvas{width:160px;height:160px;border:5px solid var(--lanterne);border-radius:50%;background:#fff;touch-action:none;cursor:crosshair}
+.colors{display:flex;gap:8px;flex-wrap:wrap}
+.colors i{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid var(--lune)}
+.code{font:400 1.7rem 'Bagel Fat One',system-ui,sans-serif;color:var(--lanterne);letter-spacing:.2em}
+
+/* Joueurs */
+.players{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:14px}
+.p{text-align:center;font-size:.9rem;line-height:1.25}
+.p img{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#fff;border:4px solid var(--brume)}
+.p.gm img{border-color:var(--baie)}
+.p button{margin-top:6px;min-height:34px;padding:4px 10px;font-size:.8rem}
+
+/* Partie : la table ronde */
+#g-msg{min-height:1.5em;font-weight:600;color:var(--lanterne)}
+#g-table{position:relative;width:100%;max-width:380px;aspect-ratio:1;margin:0 auto}
+#g-table::before{content:"";position:absolute;inset:19%;border-radius:50%;background:radial-gradient(circle,#4d2f7e,#2a1648);box-shadow:inset 0 0 0 5px rgba(255,200,87,.28),0 6px 0 var(--ombre)}
+#g-table .p{z-index:1}
+#g-table .p img{width:54px;height:54px}
+#g-act{border-color:var(--lanterne)}
+.card{border:4px solid var(--brume);border-radius:16px;padding:16px 18px;background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,0) 55%),var(--prune2);animation:reveal .7s ease}
+.card h2{font-size:1.7rem}
+@keyframes reveal{from{transform:rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
+.big{font-size:2.4rem;vertical-align:middle}
+.coin{display:inline-block;animation:flip 1.2s ease-out}
+@keyframes flip{from{transform:rotateY(0)}to{transform:rotateY(1440deg)}}
+.spin{display:inline-block;animation:spinw 1.4s cubic-bezier(.2,.7,.2,1)}
+@keyframes spinw{from{transform:rotate(0)}to{transform:rotate(1080deg)}}
+
+/* Bannières d’événement (nuit, jour, roue du chasseur) */
+#fx{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:5.5rem;text-align:center;
+  background:rgba(18,10,34,.72);pointer-events:none;opacity:0;z-index:20}
+#fx.show{animation:fxin 2.2s ease}
+#fx small{font:400 1.7rem 'Bagel Fat One',system-ui,sans-serif;color:var(--lanterne)}
+@keyframes fxin{0%{opacity:0}15%{opacity:1}80%{opacity:1}100%{opacity:0}}
+
+/* Vocal */
+#voice{position:fixed;right:12px;bottom:12px;z-index:5;display:flex;gap:8px;align-items:center;padding:6px 8px 6px 12px;font-size:.85rem;
+  background:var(--prune2);border:2px solid rgba(247,241,255,.16);border-radius:999px}
+#voice button{min-height:36px;padding:6px 14px;font-size:.85rem}
+
+footer{text-align:center;color:var(--brume);padding:8px 16px 40px;font-size:.9rem}
+footer a{color:var(--lanterne)}
+
+@media (max-width:480px){
+  main{padding:4px 10px 170px}
+  .panel{padding:14px;border-radius:18px}
+  #g-table .p{font-size:.72rem}
+  #g-table .p img{width:42px;height:42px}
+  #voice{left:10px;right:10px;justify-content:space-between}
+  body::after{width:170px;height:170px;top:-50px;right:-40px}
+}
+@media (prefers-reduced-motion:reduce){
+  body::after,h1,.brand p,.card,.coin,.spin{animation:none}
+  #fx.show{animation:none;opacity:1}
+  button{transition:none}
+}
 </style>
 </head>
 <body>
 <main>
-<h1>WolfParty</h1>
+<header class="brand"><h1>WolfParty</h1><p>Le Loup-Garou en ligne : jusqu’à 12 joueurs et un Maître du jeu.</p></header>
 <p class="err" id="err" role="alert"></p>
 
 <!-- Écran 1 : connexion -->
 <section id="s-login" class="panel">
-  <h2>Se connecter</h2>
+  <h2>Entre dans la partie</h2>
+  <p class="hint">Avec Google, tu gardes le récap de tes parties. Sans compte, ton profil disparaît quand tu te déconnectes.</p>
   <div class="row">
     <button id="b-google">Continuer avec Google</button>
     <button id="b-anon" class="alt">Jouer sans compte</button>
@@ -326,7 +399,7 @@ const isW=r=>["loup","loupranc","infect","loupcur","loupprot","loupbav"].include
 const isWU=u=>isW(G.roles[u])||G.infected.includes(u);
 const CAMP={village:"Camp : Village. Ton but : éliminer tous les Loups-Garous.",wolf:"Camp : Loups-Garous. Ton but : éliminer les villageois, jusqu’à ce que les Loups soient aussi nombreux que les autres.",solo:"Camp : solitaire. Tu joues pour toi : lis bien ton objectif ci-dessus.",switch:"Ton camp peut changer pendant la partie : lis bien ta description."};
 const EMO={loup:"🐺",villageois:"🧑‍🌾",voyante:"🔮",sorciere:"🧪",chasseur:"🏹",cupidon:"💘",salvateur:"🛡️",petitefille:"👧",detective:"🕵️",pronostiqueur:"📈",lapin:"🐇",dictateur:"👑",ange:"😇",bouffon:"🤡",loupranc:"😡",villageoisv:"👨‍🌾",enfant:"🧒",renard:"🦊",infect:"☣️",flute:"🪈",ours:"🐻",pyro:"🔥",trublion:"🌀",savant:"🥼",loupcur:"🔍",loupprot:"🐾",loupbav:"🗣️",angedechu:"👼",angegardien:"🪽",mask:"🎭"};
-const COLORS={wolf:"#c8463c",village:"#4caf7a",switch:"#f2c94c",solo:"#f28c28"};
+const COLORS={wolf:"#ff4d5e",village:"#6fe0b0",switch:"#ffe066",solo:"#ffa94d"};
 const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée"],["canicule","Canicule"]];
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let autoMode=false, engineOn=false, busy=false, autoSince=0, autoKey="";
