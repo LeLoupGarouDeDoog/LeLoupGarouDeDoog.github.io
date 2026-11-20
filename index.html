@@ -76,6 +76,8 @@ canvas{width:160px;height:160px;border:5px solid var(--lanterne);border-radius:5
 .colors i{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid var(--lune)}
 .code{font:400 1.7rem 'Bagel Fat One',system-ui,sans-serif;color:var(--lanterne);letter-spacing:.2em}
 
+h3.cat{margin:18px 0 2px;font:400 1.05rem 'Bagel Fat One',system-ui,sans-serif}
+
 /* Joueurs */
 .players{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:14px}
 .p{text-align:center;font-size:.9rem;line-height:1.25}
@@ -398,9 +400,27 @@ const ROLES=[
 const isW=r=>["loup","loupranc","infect","loupcur","loupprot","loupbav"].includes(r);
 const isWU=u=>isW(G.roles[u])||G.infected.includes(u);
 const CAMP={village:"Camp : Village. Ton but : éliminer tous les Loups-Garous.",wolf:"Camp : Loups-Garous. Ton but : éliminer les villageois, jusqu’à ce que les Loups soient aussi nombreux que les autres.",solo:"Camp : solitaire. Tu joues pour toi : lis bien ton objectif ci-dessus.",switch:"Ton camp peut changer pendant la partie : lis bien ta description."};
+const POLSIDE={enfant:"G",voyante:"G",salvateur:"G",petitefille:"G",ours:"G",trublion:"G",savant:"G",detective:"G",loupranc:"G",
+  loup:"D",infect:"D",sorciere:"D",renard:"D",chasseur:"D",lapin:"D",pronostiqueur:"D",loupcur:"D",loupprot:"D",loupbav:"D",
+  cupidon:"A",flute:"A",ange:"A",mask:"A",bouffon:"A",pyro:"A",dictateur:"A",angedechu:"A",angegardien:"A"};
+const SIDELAB={G:"Gauche",D:"Droite",A:"Apolitique"};
+const PNOTE={
+  enfant:"Tu es de Gauche. Si ton maître meurt, tu deviens de Droite.", cupidon:"Toi et les amoureux devenez Apolitiques.",
+  voyante:"Tu es de Gauche. Tu vois le camp (Droite, Gauche ou Apolitique) au lieu du rôle.", salvateur:"Tu es de Gauche.", petitefille:"Tu es de Gauche.",
+  loup:"Tu es de Droite.", infect:"Tu es de Droite. Ton infection fait rejoindre la Droite à la victime, qui garde son pouvoir.", sorciere:"Tu es de Droite.",
+  renard:"Tu es de Droite. Tu apprends s’il y a au moins un joueur de Gauche parmi ta cible et ses deux voisins.",
+  flute:"Tu es Apolitique (solitaire).", ours:"Tu es de Gauche. L’ours grogne pour chaque joueur de Droite assis à côté de toi.", chasseur:"Tu es de Droite.", villageoisv:"Tu choisis toi-même ton camp, Gauche ou Droite, la première nuit.",
+  ange:"Tu es Apolitique. Si tu n’es pas éliminé au premier vote, tu deviens de Gauche.", lapin:"Tu es de Droite.", trublion:"Tu es de Gauche.",
+  savant:"Tu es de Gauche. Ta potion fait d’un Loup de Droite une personne de Gauche, muette.",
+  pronostiqueur:"Tu es de Droite. Tu apprends « Droite » ou « Gauche » (les Loups sont de Droite). Le MJ peut te mentir.",
+  detective:"Tu es de Gauche. Tu compares le camp politique de deux joueurs.",
+  dictateur:"Tu es Apolitique. Si tu élimines un Apolitique la nuit, personne ne le sait : tu prends le pouvoir et ta voix compte double. Si ta cible n’est pas Apolitique, tu meurs.",
+  loupcur:"Tu es de Droite. Tu découvres le camp (pas le rôle) d’un électeur.", loupprot:"Tu es de Droite.", loupbav:"Tu es de Droite.", loupranc:"Tu es de Gauche.",
+  angedechu:"Ta cible doit être de Gauche.", angegardien:"Ta cible doit être de Droite.", mask:"Tu es Apolitique.", bouffon:"Tu es Apolitique.", pyro:"Tu es Apolitique.",
+  villageois:"Ton camp est tiré au sort."};
 const EMO={loup:"🐺",villageois:"🧑‍🌾",voyante:"🔮",sorciere:"🧪",chasseur:"🏹",cupidon:"💘",salvateur:"🛡️",petitefille:"👧",detective:"🕵️",pronostiqueur:"📈",lapin:"🐇",dictateur:"👑",ange:"😇",bouffon:"🤡",loupranc:"😡",villageoisv:"👨‍🌾",enfant:"🧒",renard:"🦊",infect:"☣️",flute:"🪈",ours:"🐻",pyro:"🔥",trublion:"🌀",savant:"🥼",loupcur:"🔍",loupprot:"🐾",loupbav:"🗣️",angedechu:"👼",angegardien:"🪽",mask:"🎭"};
 const COLORS={wolf:"#ff4d5e",village:"#6fe0b0",switch:"#ffe066",solo:"#ffa94d"};
-const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée"],["canicule","Canicule"]];
+const SCEN=[["cache","Rôle Caché"],["alpha","Loup Alpha"],["chut","Chuuuut"],["trouple","Trouple"],["sorciere","La Sorcière Bien Aimée"],["canicule","Canicule"],["politique","Politique (niveau avancé)","Deux camps, Gauche et Droite, chacun avec un Président. Si un Président meurt, l’autre camp gagne. Les Villageois simples n’existent pas dans ce mode. À réserver aux joueurs expérimentés."]];
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let autoMode=false, engineOn=false, busy=false, autoSince=0, autoKey="";
 let cfg={roles:{loup:1,villageois:1},scen:[]}, players=[], plCount=0, gmCount=0, started=false;
@@ -416,9 +436,12 @@ function refreshStart(){
   $("b-start").disabled=!(okGm&&plCount>=1&&total()===plCount);
 }
 function renderHost(){
-  $("h-roles").innerHTML=ROLES.filter(r=>!(autoMode&&r[0]==="loupbav")).map(r=>`<div class="room"><span style="max-width:72%;color:${COLORS[r[2]]}">${EMO[r[0]]||""} ${r[1]}<br><small style="color:var(--mute)">${r[3]}</small></span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`).join("");
-  $("h-scen").innerHTML=SCEN.map(c=>`<label class="room"><span>${c[1]}</span><input type="checkbox" style="width:auto" data-s="${c[0]}" ${cfg.scen.includes(c[0])?"checked":""}></label>`).join("");
-  $("h-autoopts").classList.toggle("hidden",!autoMode); $("h-day").value=cfg.dayLen||90; if(autoMode) cfg.roles.loupbav=0;
+  POLNAME=cfg.scen.includes("politique");
+  const CATS=[["village","Village"],["wolf","Loups-Garous"],["solo","Solitaires"],["switch","Peuvent changer de camp"]];
+  const rowH=r=>`<div class="room"><span style="max-width:72%;color:${COLORS[r[2]]}">${EMO[r[0]]||""} ${rn(r[0])}<br><small style="color:var(--mute)">${r[3]}</small></span><span><button class="alt" data-r="${r[0]}" data-d="-1">−</button> <b>${cfg.roles[r[0]]||0}</b> <button class="alt" data-r="${r[0]}" data-d="1">+</button></span></div>`;
+  $("h-roles").innerHTML=CATS.map(([k,t])=>`<h3 class="cat" style="color:${COLORS[k]}">${t}</h3>`+ROLES.filter(r=>r[2]===k&&!(autoMode&&r[0]==="loupbav")&&!(cfg.scen.includes("politique")&&r[0]==="villageois")).map(rowH).join("")).join("");
+  $("h-scen").innerHTML=SCEN.map(c=>`<label class="room"><span>${c[1]}${c[2]?`<br><small style="color:var(--mute)">${c[2]}</small>`:""}</span><input type="checkbox" style="width:auto" data-s="${c[0]}" ${cfg.scen.includes(c[0])?"checked":""}></label>`).join("");
+  $("h-autoopts").classList.toggle("hidden",!autoMode); $("h-day").value=cfg.dayLen||90; if(autoMode) cfg.roles.loupbav=0; if(cfg.scen.includes("politique")) cfg.roles.villageois=0;
   refreshStart();
 }
 $("l-host").onclick=e=>{
@@ -429,7 +452,9 @@ $("l-host").onclick=e=>{
 $("l-host").onchange=e=>{
   if(e.target.id==="h-day"){cfg.dayLen=+e.target.value; saveCfg(); return}
   const k=e.target.dataset.s; if(!k) return;
-  cfg.scen=e.target.checked?[...cfg.scen,k]:cfg.scen.filter(x=>x!==k); saveCfg();
+  cfg.scen=e.target.checked?[...cfg.scen,k]:cfg.scen.filter(x=>x!==k);
+  if(cfg.scen.includes("politique")) cfg.roles.villageois=0;
+  renderHost(); saveCfg();
 };
 $("b-start").onclick=()=>updateDoc(doc(db,"rooms",roomCode),{status:"playing"}).catch(fail);
 $("b-leave2").onclick=$("b-leave").onclick; $("b-replay").onclick=()=>replay(); $("b-voice").onclick=()=>voiceOn?closeVoice():joinVoice();
@@ -447,7 +472,7 @@ function enterGame(){
     $("g-gm").classList.remove("hidden"); $("g-gm").onclick=gmClick; $("g-gm").onchange=e=>{if(e.target.id==="lie")G.lie=e.target.checked};
     unsubs.push(onSnapshot(collection(db,"rooms",roomCode,"secret"),q=>{
       $("g-all").innerHTML=q.docs.map(d=>{const x=d.data(),r=ROLES.find(r=>r[0]===x.role);
-        return `<div class="room"><span>${esc(x.name)}</span><b style="color:${COLORS[r[2]]}">${r[1]}</b></div>`}).join("");
+        return `<div class="room"><span>${esc(x.name)}</span><b style="color:${COLORS[r[2]]}">${rn(x.role)}</b></div>`}).join("");
     }));
   }
   if(eng()) startEngine();
@@ -472,16 +497,25 @@ async function deal(){
     ST={phase:"night",turn:1,alive:Object.fromEntries(pl.map(p=>[p.id,true])),dead:[],wake:null,wakeId:Date.now(),gid:Date.now(),mayor:null,mayorDone:false,mute:[],silent:false,mutedU:[],pub:Object.fromEntries(pl.map((p,i)=>[p.id,deck[i]]).filter(x=>x[1]==="villageoisv")),hunter:null,vote:null,winner:null,final:null,
         msg:"La nuit tombe. Le MJ réveille les rôles un par un."};
     (await getDocs(collection(db,"rooms",code,"secret"))).docs.filter(d=>!G.roles[d.id]).forEach(d=>deleteDoc(d.ref));
+    G.pol=c.scen.includes("politique"); G.side={}; G.pres=null; G.sideDirty=false; G.dict=null; G.dictKill=null; G.dictDies=null;
+    if(G.pol){
+      initSides(pl,deck); const cnt=x=>Object.values(G.side).filter(v=>v===x).length;
+      if(!deck.includes("villageoisv")&&(!cnt("G")||!cnt("D"))) throw {message:"Politique : il faut au moins un joueur de Gauche et un de Droite. Modifie les rôles.",polFail:true};
+      pl.forEach(p=>G.q.push([p.id,{pol:true,side:SIDELAB[G.side[p.id]]||"à choisir la première nuit"}]));
+      if(!deck.includes("villageoisv")) initPres();
+      await flush();
+    }
     G.log.push("Scénarios : "+(c.scen.join(", ")||"aucun")); pl.forEach((p,i)=>G.log.push(`${p.name} : ${rn(deck[i])}`));
     startNight(); await push();
-  }catch(e){fail(e)}
+  }catch(e){fail(e); if(e&&e.polFail) updateDoc(doc(db,"rooms",roomCode),{status:"lobby"}).catch(()=>{})}
 }
 
 
 // ---------- Étape 3 : moteur de partie (le client du MJ fait office de serveur) ----------
 let ST=null, G=null, ACT={}, WOLF={}, mySecret=null, IGM=false, wolfSub=false, sel=[], saveW=false, lastKey="", sent="", myVote=null, timer;
 const nm=u=>players.find(p=>p.id===u)?.name||"?";
-const rn=r=>(ROLES.find(x=>x[0]===r)||[0,r])[1];
+let POLNAME=false;
+const rn=r=>(r==="loupbav"&&POLNAME)?"Loup Boyard":(ROLES.find(x=>x[0]===r)||[0,r])[1];
 const alive=()=>Object.keys(ST.alive).filter(k=>ST.alive[k]);
 const holders=r=>alive().filter(u=>r==="loup"?isWU(u):G.roles[u]===r);
 const sd=u=>doc(db,"rooms",roomCode,"secret",u);
@@ -495,7 +529,7 @@ function render(){
   if(!started||!ST) return;
   $("g-title").textContent={night:"La nuit tombe sur le village",day:"Le jour se lève",vote:"Le village vote",hunter:"Le chasseur tire",curieux:"Le Loup Curieux enquête",bienaimee:"La Sorcière Bien Aimée parle",mayor:"Le Maire transmet son écharpe",over:"Partie terminée"}[ST.phase]||"";
   $("g-msg").textContent=ST.msg+(ST.winner?" Victoire : "+ST.winner+".":"");
-  document.body.dataset.phase=ST.phase; effects(); saveRecap(); drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
+  POLNAME=!!(G?.pol||mySecret?.pol); document.body.dataset.phase=ST.phase; effects(); saveRecap(); drawTable(); renderRole(); renderAct(); if(IGM&&G) renderGM();
   $("b-replay").classList.toggle("hidden",!(isHost()&&ST.phase==="over")); applyMute();
 }
 function drawTable(){
@@ -507,7 +541,7 @@ function drawTable(){
 function renderRole(){
   if(IGM){$("g-role").innerHTML="<p>Tu es le Maître du jeu.</p>";return}
   const x=mySecret; if(!x) return; const r=ROLES.find(r=>r[0]===x.role);
-  $("g-role").innerHTML=`<div class="card" style="border-color:${COLORS[r[2]]}"><h2><span class="big">${EMO[x.role]||""}</span> ${r[1]}</h2><p>${r[3]}</p><p><small>${CAMP[r[2]]}</small></p>${x.mates.length?`<p>Ta meute : <b>${x.mates.map(esc).join(", ")}</b></p>`:""}${x.info?`<p><b>${esc(x.info)}</b></p>`:""}${x.charm?.length?`<p>Charmés : ${x.charm.map(esc).join(", ")}</p>`:""}</div>`;
+  $("g-role").innerHTML=`<div class="card" style="border-color:${COLORS[r[2]]}"><h2><span class="big">${EMO[x.role]||""}</span> ${rn(x.role)}</h2><p>${r[3]}</p><p><small>${CAMP[r[2]]}</small></p>${x.pol?`<p><b>Camp politique : ${x.side||"?"}</b></p><p><small>${PNOTE[x.role]||""}</small></p>`:""}${x.pres?`<p>🎖️ <b>Tu es le Président de la ${x.pres.side}.</b> Ton camp : ${x.pres.list.map(esc).join(", ")}</p>`:""}${x.mates.length?`<p>Ta meute : <b>${x.mates.map(esc).join(", ")}</b></p>`:""}${x.info?`<p><b>${esc(x.info)}</b></p>`:""}${x.charm?.length?`<p>Charmés : ${x.charm.map(esc).join(", ")}</p>`:""}</div>`;
 }
 function renderAct(){
   const el=$("g-act"); if(IGM||!mySecret){el.classList.add("hidden");return}
@@ -530,6 +564,7 @@ function renderAct(){
     else{const max=ST.wake.max||1, w=mySecret.witch, ab=mySecret.ability;
       h=r==="sorciere"?`<p>${w?.victim?`Les Loups ont visé <b>${esc(w.victim)}</b>.`:"Personne n'a été visé."}</p>${w?.victim&&w.life?`<button class="${saveW?"":"alt"}" data-save="1">Potion de vie : sauver</button> `:""}${w?.poison&&!saveW?`<p>Une seule potion par nuit. Potion de poison (optionnel) :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div>`:""}<button data-ok="1">Confirmer</button>`
         
+        :r==="villageoisv"?`<p>Choisis ton camp politique :</p><div class="row"><button class="${saveW?"alt":""}" data-save="off">Gauche</button><button class="${saveW?"":"alt"}" data-save="on">Droite</button></div><button data-ok="1">Confirmer</button>`
         :r==="infect"?`<p>Victime des Loups : <b>${esc(ab?.victim||"aucune")}</b>. Infections restantes : ${ab?.left}</p>${ab?.left>0&&ab?.victim?`<button class="${saveW?"":"alt"}" data-save="1">Infecter cette victime</button> `:""}<button data-ok="1">Confirmer</button>`
         :r==="pyro"?`<p>Huile jusqu’à 2 joueurs, ou embrase ceux déjà huilés :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button class="${saveW?"":"alt"}" data-save="1">Embraser</button> <button data-ok="1">Confirmer</button>`
         :r==="mask"?`<p>Réduis deux joueurs au silence demain. Marteau restant : ${ab?.left}</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div>${ab?.left>0?`<button class="${saveW?"":"alt"}" data-save="1">Marteau : éliminer le 1er joueur choisi</button> `:""}<button data-ok="1" ${sel.length?"":"disabled"}>Confirmer</button>`
@@ -537,7 +572,7 @@ function renderAct(){
         :r==="lapin"?`<p>Cachettes restantes : ${ab?.left}</p>${ab?.left>0?`<button class="${saveW?"":"alt"}" data-save="1">Se cacher cette nuit</button> `:""}<button data-ok="1">Confirmer</button>`
         :r==="dictateur"?`<p>Coups d’État restants : ${ab?.left}</p><button class="${saveW?"":"alt"}" data-save="1">Faire un coup d’État</button><p>Cible :</p><div class="row">${others.map(u=>btn(u,"data-t")).join("")}</div><button data-ok="1" ${!saveW||sel.length?"":"disabled"}>Confirmer</button>`
         :r==="petitefille"?`Tu observes les Loups. Cibles évoquées : ${[...new Set(Object.values(WOLF).map(a=>esc(nm(a.targets[0]))))].join(", ")||"aucune"}.`
-        :`<p>${max>1?"Choisis "+max+" joueurs":"Choisis un joueur"} :</p><div class="row">${(["salvateur","cupidon","detective"].includes(r)?alive():others).map(u=>btn(u,"data-t")).join("")}</div>${r==="loup"?`<p>Choix de la meute : ${Object.entries(WOLF).map(([u,a])=>esc(nm(u))+" → "+esc(nm(a.targets[0]))).join(", ")||"aucun"}</p>`:""}<button data-ok="1" ${sel.length===max?"":"disabled"}>Confirmer</button>`;}
+        :`<p>${max>1?"Choisis "+max+" joueurs":"Choisis un joueur"} :</p><div class="row">${(ab?.only?ab.only.map(o=>o.id):(["salvateur","cupidon","detective"].includes(r)?alive():others)).map(u=>btn(u,"data-t")).join("")}</div>${r==="loup"?`<p>Choix de la meute : ${Object.entries(WOLF).map(([u,a])=>esc(nm(u))+" → "+esc(nm(a.targets[0]))).join(", ")||"aucun"}</p>`:""}<button data-ok="1" ${sel.length===max?"":"disabled"}>Confirmer</button>`;}
   } else h=ST.phase==="night"?"Tu dors… ferme les yeux.":ST.phase==="day"?(ST.turn===1&&!ST.mayorDone?"Discutez : on va élire un Maire (voix double), puis le village votera.":"Discutez : le vote va être lancé."):"";
   el.innerHTML=h; el.classList.toggle("hidden",!h);
 }
@@ -548,6 +583,7 @@ $("g-act").onclick=async e=>{
     if(d.a==="pdf"){makePdf(); return}
     if(d.vote){myVote={id:ST.vote.id,t:d.vote}; await setDoc(doc(db,"rooms",roomCode,"votes",me.uid),{id:ST.vote.id,target:d.vote})}
     else if(d.spin){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,stage:d.spin,targets:[],save:false,wolf:false}); sent=key()}
+    else if(d.save==="on"||d.save==="off") saveW=d.save==="on";
     else if(d.save){saveW=!saveW; if(saveW&&mySecret.role==="sorciere") sel=[]}
     else if(d.t){if(mySecret.role==="sorciere") saveW=false; sel=sel.includes(d.t)?sel.filter(x=>x!==d.t):[...sel,d.t].slice(-max)}
     else if(d.ok){await setDoc(doc(db,"rooms",roomCode,"actions",me.uid),{wakeId:ST.wakeId,stage:ST.hunter?.stage||null,targets:sel,save:saveW,wolf:ST.wake?.role==="loup"}); sent=key()}
@@ -560,7 +596,7 @@ const acts=r=>holders(r).map(u=>ACT[u]).filter(a=>a&&a.wakeId===ST.wakeId);
 const maxOf=s=>s==="cupidon"?(G.scen.includes("trouple")?3:2):s==="detective"||s==="flute"||s==="pyro"||s==="mask"?2:1;
 function ready(s){
   const a=acts(s), n=holders(s).length; if(a.length<n) return false;
-  if(["sorciere","lapin","dictateur","infect","pyro","flute","mask"].includes(s)) return true;
+  if(["sorciere","lapin","dictateur","infect","pyro","flute","mask","villageoisv"].includes(s)) return true;
   return a.every(x=>x.targets.length===maxOf(s)&&x.targets.join()===a[0].targets.join());
 }
 function renderGM(){
@@ -591,36 +627,44 @@ async function gmClick(e){
       else{ST.msg=`${nm(bv)} a oublié le mot et meurt.`; kill(bv,"a oublié le mot"); await after("day")}} }catch(err){fail(err)}
 }
 function startNight(){G.shield=null; G.log.push("— Nuit "+ST.turn+" —"); const t1=ST.turn===1;
-  G.steps=["cupidon","enfant","angedechu","angegardien","detective","voyante","renard","pronostiqueur","savant","salvateur","lapin","dictateur","flute","pyro","mask","loupprot","loup","infect","sorciere"]
-  .filter(s=>(!["cupidon","enfant","angedechu","angegardien"].includes(s)||t1)&&(s!=="lapin"||G.rabbitLeft>0)&&(s!=="dictateur"||(G.dictLeft>0&&!G.coup))&&(s!=="infect"||G.infectLeft>0)&&holders(s).length); G.done={}}
+  G.steps=["villageoisv","cupidon","enfant","angedechu","angegardien","detective","voyante","renard","pronostiqueur","savant","salvateur","lapin","dictateur","flute","pyro","mask","loupprot","loup","infect","sorciere"]
+  .filter(s=>(!["villageoisv","cupidon","enfant","angedechu","angegardien"].includes(s)||t1)&&(s!=="villageoisv"||G.pol)&&(s!=="lapin"||G.rabbitLeft>0)&&(s!=="dictateur"||(G.dictLeft>0&&!G.coup))&&(s!=="infect"||G.infectLeft>0)&&holders(s).length); G.done={}}
 async function wake(s){
   if(s==="sorciere") await updateDoc(doc(db,"rooms",roomCode,"secret",holders(s)[0]),{witch:{victim:G.victim?nm(G.victim):null,life:G.life,poison:G.poison}});
   if(["lapin","dictateur","infect","mask"].includes(s)) await updateDoc(sd(holders(s)[0]),{ability:{left:s==="lapin"?G.rabbitLeft:s==="dictateur"?G.dictLeft:s==="mask"?G.hammerLeft:G.infectLeft,victim:G.victim?nm(G.victim):null}});
+  if(G.pol&&(s==="angedechu"||s==="angegardien")) await updateDoc(sd(holders(s)[0]),{ability:{only:alive().filter(u=>G.side[u]===(s==="angedechu"?"G":"D")).map(u=>({id:u,name:nm(u)}))}});
   ST.wakeId++; ST.wake={role:s,max:maxOf(s)}; await push();
 }
 async function endStep(s){
-  const a=acts(s), h=holders(s), t=a[0].targets, sd=u=>doc(db,"rooms",roomCode,"secret",u);
-  if(s==="cupidon"){G.couple=t; G.log.push("Cupidon lie "+t.map(nm).join(", "));
+  const a=acts(s), h=holders(s), t=(G.dict&&["flute","pyro","mask","angedechu"].includes(s))?a[0].targets.filter(u=>u!==G.dict):a[0].targets, sd=u=>doc(db,"rooms",roomCode,"secret",u);
+  if(s==="cupidon"){G.couple=t; G.log.push("Cupidon lie "+t.map(nm).join(", ")); if(G.pol) [...t,h[0]].forEach(u=>setSide(u,"A"));
     await Promise.all(t.map(x=>updateDoc(sd(x),{info:`Tu es amoureux(se) de ${t.filter(y=>y!==x).map(nm).join(" et ")}. Vous gagnez ensemble.`})));
     await updateDoc(sd(h[0]),{info:`Tu as lié ${t.map(nm).join(", ")}.`});}
-  if(s==="voyante"){G.log.push(`Voyante observe ${nm(t[0])} (${rn(G.roles[t[0]])})`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est ${rn(G.roles[t[0]])}.`});}
+  if(s==="voyante"){const sl=SIDELAB[G.side[t[0]]]; G.log.push(`Voyante observe ${nm(t[0])} (${G.pol?sl:rn(G.roles[t[0]])})`); await updateDoc(sd(h[0]),{info:G.pol?`${nm(t[0])} est du camp : ${sl}.`:`${nm(t[0])} est ${rn(G.roles[t[0]])}.`});}
   if(s==="salvateur"){G.protect=t[0]; G.log.push(`Salvateur protège ${nm(t[0])}`);}
   if(s==="loup"){G.victim=t[0]; G.log.push(`Les Loups visent ${nm(t[0])}`);}
   if(s==="sorciere"){const x=a[0];
     if(x.save&&G.life&&G.victim){G.life=false; G.log.push(`Sorcière sauve ${nm(G.victim)}`); G.victim=null}
     if(x.targets[0]&&G.poison&&!x.save){G.poison=false; G.poisoned=x.targets[0]; G.log.push(`Sorcière empoisonne ${nm(x.targets[0])}`)}}
   const camp=u=>isWU(u)?"w":["ange","bouffon"].includes(G.roles[u])?"s":"v";
-  if(s==="detective"){const same=camp(t[0])===camp(t[1]); G.log.push(`Détective compare ${nm(t[0])} et ${nm(t[1])} : ${same?"Oui":"Non"}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} et ${nm(t[1])} sont du même camp ? ${same?"Oui":"Non"}.`});}
-  if(s==="pronostiqueur"){const good=camp(t[0])!=="w", shown=G.lie?!good:good; G.log.push(`Pronostiqueur : ${nm(t[0])} = ${shown?"Gentil":"Méchant"}${G.lie?" (mensonge)":""}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est ${shown?"Gentil":"Méchant"}.`});}
+  if(s==="detective"){const same=G.pol?G.side[t[0]]===G.side[t[1]]:camp(t[0])===camp(t[1]); G.log.push(`Détective compare ${nm(t[0])} et ${nm(t[1])} : ${same?"Oui":"Non"}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} et ${nm(t[1])} sont du même camp ? ${same?"Oui":"Non"}.`});}
+  if(s==="pronostiqueur"&&G.pol){const s0=G.side[t[0]], sh=(G.lie&&s0!=="A")?(s0==="G"?"D":"G"):s0; G.log.push(`Pronostiqueur : ${nm(t[0])} = ${SIDELAB[sh]}${G.lie?" (mensonge)":""}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est de camp : ${SIDELAB[sh]}.`});}
+  else if(s==="pronostiqueur"){const good=camp(t[0])!=="w", shown=G.lie?!good:good; G.log.push(`Pronostiqueur : ${nm(t[0])} = ${shown?"Gentil":"Méchant"}${G.lie?" (mensonge)":""}`); await updateDoc(sd(h[0]),{info:`${nm(t[0])} est ${shown?"Gentil":"Méchant"}.`});}
   if(s==="lapin"&&a[0].save&&G.rabbitLeft>0){G.rabbitLeft--; G.rabbitHide=h[0]; G.log.push("Lapin se cache");}
-  if(s==="dictateur"&&a[0].save&&t[0]&&G.dictLeft>0){G.dictLeft--; G.coup={by:h[0],t:t[0]}; G.log.push(`Dictateur prépare un coup d’État contre ${nm(t[0])}`);}
+  if(s==="dictateur"&&G.pol&&a[0].save&&t[0]&&G.dictLeft>0){G.dictLeft--;
+    if(G.side[t[0]]==="A"&&t[0]!==h[0]){G.dictKill=t[0]; G.dict=h[0]; G.log.push(`Dictateur élimine ${nm(t[0])} (Apolitique) en secret`); polDictInform(h[0])}
+    else{G.dictDies=h[0]; G.log.push(`Dictateur vise ${nm(t[0])} (non Apolitique) : il meurt`)}}
+  else if(s==="dictateur"&&a[0].save&&t[0]&&G.dictLeft>0){G.dictLeft--; G.coup={by:h[0],t:t[0]}; G.log.push(`Dictateur prépare un coup d’État contre ${nm(t[0])}`);}
+  if(s==="villageoisv"){const u=h[0]; setSide(u,a[0].save?"D":"G"); G.log.push(`${nm(u)} (Villageois villageois) choisit la ${a[0].save?"Droite":"Gauche"}`); if(!G.pres) initPres();}
   if(s==="enfant"){G.master=t[0]; G.child=h[0]; G.log.push(`Enfant sauvage choisit ${nm(t[0])}`); await updateDoc(sd(h[0]),{info:`Ton maître est ${nm(t[0])}.`});}
   if(s==="angedechu"||s==="angegardien"){G.ange={uid:h[0],t:t[0],kind:s==="angedechu"?"dechu":"gardien"}; G.log.push(`${rn(s)} cible ${nm(t[0])}`); await updateDoc(sd(h[0]),{info:`Ta cible : ${nm(t[0])}.`});}
-  if(s==="renard"){const f=nbs(t[0]).some(isWU); G.log.push(`Renard flaire ${nm(t[0])} : ${f?"loup":"rien"}`);
+  if(s==="renard"){const f=G.pol?nbs(t[0]).some(u=>G.side[u]==="G"):nbs(t[0]).some(isWU); G.log.push(`Renard flaire ${nm(t[0])} : ${f?"loup":"rien"}`);
     if(G.foxLost) await updateDoc(sd(h[0]),{info:"Tu as perdu ton pouvoir."});
-    else{if(!f)G.foxLost=true; await updateDoc(sd(h[0]),{info:f?`Un Loup se cache autour de ${nm(t[0])} !`:`Aucun Loup autour de ${nm(t[0])} : tu perds ton pouvoir.`});}}
+    else{if(!f)G.foxLost=true; await updateDoc(sd(h[0]),{info:f?`${G.pol?"Au moins un joueur de Gauche se trouve":"Un Loup se cache"} autour de ${nm(t[0])} !`:`${G.pol?"Aucun joueur de Gauche":"Aucun Loup"} autour de ${nm(t[0])} : tu perds ton pouvoir.`});}}
   if(s==="savant"){const u=t[0]; let ok=false, m="Le Savant fou t’a guéri : tu rejoins les Villageois, muet.";
-    if(G.infected.includes(u)){G.infected=G.infected.filter(x=>x!==u); G.q.push([u,{wolfx:false,info:m}]); ok=true}
+    if(G.pol&&isWU(u)&&G.side[u]==="D"){G.infected=G.infected.filter(x=>x!==u); G.conv=G.conv.filter(x=>x!==u); const wr=isW(G.roles[u]); if(wr) G.roles[u]="villageois"; setSide(u,"G");
+      G.q.push([u,{wolfx:false,...(wr?{role:"villageois",mates:[]}:{}),info:"Le Savant fou t’a guéri : tu es désormais de Gauche, muet."}]); ok=true}
+    else if(G.infected.includes(u)){G.infected=G.infected.filter(x=>x!==u); G.q.push([u,{wolfx:false,info:m}]); ok=true}
     else if(G.conv.includes(u)){G.roles[u]="villageois"; G.conv=G.conv.filter(x=>x!==u); G.q.push([u,{role:"villageois",mates:[],info:m}]); ok=true}
     if(ok){G.muted.push(u); ST.muted=G.muted.map(nm); ST.mutedU=[...G.muted]} G.log.push(`Savant fou examine ${nm(u)}${ok?" : guéri":""}`);}
   if(s==="flute"){t.forEach(u=>{if(!G.charmed.includes(u))G.charmed.push(u)}); G.log.push("Flûtiste charme "+t.map(nm).join(", "));
@@ -628,7 +672,7 @@ async function endStep(s){
   if(s==="pyro"){if(a[0].save){G.burn=G.oiled.filter(u=>ST.alive[u]); G.oiled=[]; G.log.push("Pyromane embrase");}
     else{t.forEach(u=>{if(!G.oiled.includes(u))G.oiled.push(u)}); G.log.push("Pyromane huile "+t.map(nm).join(", "));}}
   if(s==="loupprot"){G.shield=t[0]; G.log.push(`Loup Protecteur protège ${nm(t[0])} du vote`);}
-  if(s==="infect"&&a[0].save&&G.infectLeft>0&&G.victim){const v=G.victim; G.infectLeft--; G.infected.push(v); G.victim=null; G.log.push(`Infect Père des Loups infecte ${nm(v)}`);
+  if(s==="infect"&&a[0].save&&G.infectLeft>0&&G.victim){const v=G.victim; G.infectLeft--; G.infected.push(v); G.victim=null; if(G.pol) setSide(v,"D"); G.log.push(`Infect Père des Loups infecte ${nm(v)}`);
     G.q.push([v,{wolfx:true,info:"Tu as été infecté : tu rejoins les Loups, en gardant ton pouvoir !"}]);}
   if(s==="mask"){if(a[0].save&&G.hammerLeft>0&&t[0]){G.hammerLeft--; G.hammered=t[0]; G.log.push("The Mask abat son marteau sur "+nm(t[0]))}
     else{G.maskMute=t; G.log.push("The Mask réduit au silence "+t.map(nm).join(", "))}}
@@ -642,15 +686,16 @@ function kill(u,cause){
   if(G.roles[u]==="trublion") G.shuffle=true;
   if(u===G.mayor) G.mayorDead=u;
   if(G.roles[u]==="sorciere"&&G.scen.includes("sorciere")) G.pendingBA=u;
-  if(u===G.master&&G.child&&ST.alive[G.child]&&G.roles[G.child]==="enfant"){G.roles[G.child]="loup"; G.conv.push(G.child); G.log.push(`${nm(G.child)} (Enfant sauvage) devient Loup-Garou`); G.q.push([G.child,{role:"loup",info:"Ton maître est mort : tu deviens Loup-Garou !"}])}
+  if(u===G.master&&G.child&&ST.alive[G.child]&&G.roles[G.child]==="enfant"){G.roles[G.child]="loup"; if(G.pol) setSide(G.child,"D"); G.conv.push(G.child); G.log.push(`${nm(G.child)} (Enfant sauvage) devient Loup-Garou`); G.q.push([G.child,{role:"loup",info:"Ton maître est mort : tu deviens Loup-Garou !"}])}
   if(G.couple?.includes(u)) G.couple.filter(x=>x!==u).forEach(x=>kill(x,"chagrin d’amour"));
 }
 function winner(){
   const al=alive(), w=al.filter(isWU).length, solo=al.some(u=>["pyro","flute"].includes(G.roles[u]));
   if(!al.length) return "personne";
   if(G.couple&&al.length>=2&&al.every(u=>G.couple.includes(u))) return "les amoureux";
-  const f=al.find(u=>G.roles[u]==="flute"); if(f&&al.every(u=>u===f||G.charmed.includes(u))) return "le Joueur de flûte";
-  if(al.length===1&&G.roles[al[0]]==="pyro") return "le Pyromane";
+  const f=al.find(u=>G.roles[u]==="flute"); if(f&&!dictActive()&&al.every(u=>u===f||G.charmed.includes(u))) return "le Joueur de flûte";
+  if(al.length===1&&G.roles[al[0]]==="pyro"&&!dictActive()) return "le Pyromane";
+  if(G.pol) return polWinner(al);
   if(G.alpha&&ST.alive[G.alpha]) return al.length===1?"le Loup Alpha":null;
   if(solo) return null;
   if(w===0) return "le village"; if(w>=al.length-w) return "les Loups-Garous"; return null;
@@ -666,11 +711,16 @@ async function after(next){
   G.mayorDead=null;
   if(G.shuffle) await reshuffle();
   const ag=G.ange; if(ag?.kind==="dechu"&&!ag.done&&next==="night"&&ST.turn===1){ag.done=true;
-    if(!ST.alive[ag.t]){ST.phase="over"; ST.winner="l’Ange déchu"; ST.final=G.roles; G.log.push("Victoire : l’Ange déchu"); await push(); return}
-    G.roles[ag.uid]="villageois"; await updateDoc(sd(ag.uid),{role:"villageois",info:"Ta cible a survécu : tu deviens Villageois."})}
+    if(!ST.alive[ag.t]&&!dictActive()){ST.phase="over"; ST.winner="l’Ange déchu"; ST.final=G.roles; G.log.push("Victoire : l’Ange déchu"); await push(); return}
+    if(ST.alive[ag.t]){G.roles[ag.uid]="villageois"; await updateDoc(sd(ag.uid),{role:"villageois",info:"Ta cible a survécu : tu deviens Villageois."})}}
   const w=winner();
   if(w){ST.phase="over"; ST.winner=w+((G.ange?.kind==="gardien"&&ST.alive[G.ange.t])?" et l’Ange gardien":""); ST.final=G.roles; G.log.push("Victoire : "+w); await push(); return}
-  if(next==="night"&&G.scen.includes("canicule")&&ST.turn>=6){alive().forEach(u=>kill(u,"canicule")); ST.phase="over"; ST.winner="personne (canicule)"; ST.final=G.roles; await push(); return}
+  if(next==="night"&&G.scen.includes("canicule")&&ST.turn>=6){
+    if(G.pol){const n={G:0,D:0,A:0}, dic=!!G.dict&&!!ST.alive[G.dict]; alive().forEach(u=>{if(G.side[u]) n[G.side[u]]++});
+      const mx=Math.max(n.G,n.D,dic?n.A:0), top=[n.G===mx&&"la Gauche",n.D===mx&&"la Droite",(dic&&n.A===mx)&&"la dictature des Apolitiques"].filter(Boolean);
+      ST.phase="over"; ST.winner=(top.length===1?top[0]:"personne (égalité)")+` (élections présidentielles : ${n.G} Gauche, ${n.D} Droite${dic?", "+n.A+" Apolitiques":""})`;
+      ST.final=G.roles; G.log.push("Élections présidentielles : "+ST.winner); await push(); return}
+    alive().forEach(u=>kill(u,"canicule")); ST.phase="over"; ST.winner="personne (canicule)"; ST.final=G.roles; await push(); return}
   if(next==="night"){G.victim=G.poisoned=G.protect=G.rabbitHide=null; ST.mute=[]; ST.silent=false; ST.turn++; ST.phase="night"; ST.wake=null; ST.vote=null; ST.msg=`Nuit ${ST.turn}.`;
     const ws=alive().filter(isWU);
     if(G.scen.includes("alpha")&&ST.turn===3&&!G.alpha&&ws.length){G.alpha=ws[Math.random()*ws.length|0]; G.log.push("Loup Alpha : "+nm(G.alpha)); await updateDoc(doc(db,"rooms",roomCode,"secret",G.alpha),{info:"Tu es le Loup Alpha : tu gagnes seul en éliminant tout le monde."})}
@@ -684,10 +734,12 @@ async function dawn(){
   if(G.poisoned&&G.poisoned!==G.rabbitHide) kill(G.poisoned,"empoisonné");
   G.burn.forEach(u=>kill(u,"brûlé par le Pyromane")); G.burn=[];
   if(G.hammered){kill(G.hammered,"marteau de The Mask"); G.hammered=null}
+  if(G.dictKill){kill(G.dictKill,"coup d’État nocturne"); G.dictKill=null}
+  if(G.dictDies){kill(G.dictDies,"coup d’État raté"); G.dictDies=null}
   const d=before.filter(u=>!ST.alive[u]);
   ST.msg=d.length?"Cette nuit, sont morts : "+d.map(nm).join(", ")+".":"Personne n'est mort cette nuit.";
   ST.mute=G.maskMute.filter(u=>ST.alive[u]); G.maskMute=[]; if(ST.mute.length) ST.msg+=` The Mask réduit au silence : ${ST.mute.map(nm).join(", ")}.`;
-  const bear=alive().find(u=>G.roles[u]==="ours"); if(bear) ST.msg+=` L’ours grogne ${nbs(bear).filter(u=>u!==bear&&isWU(u)).length} fois.`;
+  const bear=alive().find(u=>G.roles[u]==="ours"); if(bear) ST.msg+=` L’ours grogne ${nbs(bear).filter(u=>u!==bear&&(G.pol?G.side[u]==="D":isWU(u))).length} fois.`;
   await after("day");
 }
 async function startVote(kind){
@@ -702,13 +754,14 @@ async function startVote(kind){
 async function closeVote(){
   if(ST.phase!=="vote") return; clearTimeout(timer); if(ST.vote.kind==="mayor") return closeMayor(); G.voteN++; const vid=ST.vote.id;
   const q=await getDocs(collection(db,"rooms",roomCode,"votes")), c={};
-  q.docs.forEach(d=>{const v=d.data(); if(v.id===ST.vote.id&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+(d.id===G.mayor?2:1)});
+  q.docs.forEach(d=>{const v=d.data(); if(v.id===ST.vote.id&&ST.alive[d.id]&&ST.alive[v.target]) c[v.target]=(c[v.target]||0)+(d.id===((G.dict&&ST.alive[G.dict])?G.dict:G.mayor)?2:1)});
   const max=Math.max(0,...Object.values(c)), top=Object.keys(c).filter(u=>c[u]===max);
+  if(G.pol&&G.voteN===1) holders("ange").filter(u=>!(top.length===1&&top[0]===u)).forEach(u=>{setSide(u,"G"); G.q.push([u,{info:"Tu n’as pas été éliminé au premier vote : tu deviens de Gauche."}])});
   G.log.push("Vote : "+(Object.entries(c).map(([u,n])=>nm(u)+" "+n).join(", ")||"aucun vote"));
   if(top.length===1&&top[0]===G.shield){ST.msg=`${nm(top[0])} est protégé par un Loup : personne n'est éliminé.`; ST.vote=null; return after("night")}
   if(top.length===1){const u=top[0], r=G.roles[u];
     kill(u,"éliminé par le village"); ST.msg=`Le village a éliminé ${nm(u)}.`; ST.vote=null;
-    const won=(r==="bouffon")?"le Bouffon":(r==="ange"&&G.voteN===1)?"l’Ange":null;
+    const won=dictActive()?null:(r==="bouffon")?"le Bouffon":(r==="ange"&&G.voteN===1)?"l’Ange":null;
     if(won){ST.phase="over"; ST.winner=won; ST.final=G.roles; G.log.push("Victoire : "+won); await push(); return}
     if(r==="loupranc"){const vs=q.docs.filter(d=>d.data().id===vid).filter(d=>d.data().target===u&&ST.alive[d.id]).map(d=>d.id);
       if(vs.length){const v=vs[Math.random()*vs.length|0]; kill(v,"vengeance du Loup Rancunier"); ST.msg+=` Le Loup Rancunier emporte ${nm(v)} avec lui.`}}
@@ -737,7 +790,7 @@ async function hunterAuto(){
       G.log.push(`Tir dévié : ${nm(v)} touché`); ST.hunter=null; kill(v,"tir du chasseur"); await after(G.next)}
   }catch(e){fail(e)}
 }
-async function flush(){const q=G.q; G.q=[];
+async function flush(){if(G.pol) polSync(); const q=G.q; G.q=[];
   for(const [u,p] of q){if(p.role==="loup"||p.wolfx) p.mates=alive().filter(x=>x!==u&&isWU(x)).map(nm); await updateDoc(sd(u),p)}}
 async function reshuffle(){
   G.shuffle=false; const al=alive(), rs=al.map(u=>G.roles[u]);
@@ -749,7 +802,7 @@ async function reshuffle(){
 }
 async function resolveCurieux(){
   const a=ACT[ST.cur.uid]; if(a?.wakeId!==ST.wakeId) return; const t=a.targets[0];
-  await updateDoc(sd(ST.cur.uid),{info:`${nm(t)} est ${rn(G.roles[t])}.`}); G.log.push(`Loup Curieux découvre le rôle de ${nm(t)}`);
+  await updateDoc(sd(ST.cur.uid),{info:G.pol?`${nm(t)} est du camp : ${SIDELAB[G.side[t]]}.`:`${nm(t)} est ${rn(G.roles[t])}.`}); G.log.push(`Loup Curieux découvre le rôle de ${nm(t)}`);
   ST.cur=null; await after(G.next);
 }
 function makePdf(){
@@ -958,7 +1011,7 @@ function didWin(role,w){
   if(!role||!w) return null; const camp=(ROLES.find(r=>r[0]===role)||[])[2];
   if(w.includes("les Loups-Garous")) return isW(role);
   if(w.startsWith("le village")) return camp==="village"||camp==="switch";
-  if(w.includes("amoureux")) return null;
+  if(w.includes("amoureux")||/^(la Gauche|la Droite|la dictature|les solitaires|personne)/.test(w)) return null;
   return w.toLowerCase().includes(rn(role).toLowerCase());
 }
 let lastSaved=0;
@@ -979,6 +1032,35 @@ async function openRecap(){
       return `<details class="room" style="display:block"><summary>${new Date(g.at).toLocaleString("fr-FR")} · ${r} · ${res}</summary><p>Vainqueur : ${esc(g.winner)}</p><p>${(g.players||[]).map(p=>esc(p.name)+" ("+rn(p.role)+")").join(", ")}</p></details>`}).join("")
       :"Aucune partie enregistrée pour l’instant.";
   }catch(e){fail(e)}
+}
+function setSide(u,sd){if(G.side[u]===sd) return; G.side[u]=sd; G.q.push([u,{side:SIDELAB[sd]}]); G.sideDirty=true}
+function initSides(pl,deck){
+  const plain=[]; pl.forEach((p,i)=>{const r=deck[i]; if(POLSIDE[r]) G.side[p.id]=POLSIDE[r]; else if(r==="villageois") plain.push(p.id)});
+  const cnt=x=>Object.values(G.side).filter(v=>v===x).length;
+  plain.sort(()=>Math.random()-.5).forEach(u=>{G.side[u]=cnt("G")<cnt("D")?"G":cnt("D")<cnt("G")?"D":(Math.random()<.5?"G":"D")});
+}
+function initPres(){
+  G.pres={}; ["G","D"].forEach(x=>{const m=alive().filter(u=>G.side[u]===x); G.pres[x]=m.length?m[Math.random()*m.length|0]:null}); G.sideDirty=true;
+}
+// Met à jour les Présidents et la liste complète de leur camp quand les camps changent
+function polSync(){
+  if(!G.pres||!G.sideDirty) return;
+  ["G","D"].forEach(x=>{const p=G.pres[x]; if(p) G.q.push([p,{pres:{side:SIDELAB[x],list:Object.keys(G.side).filter(u=>G.side[u]===x).map(nm)}}])});
+  G.sideDirty=false;
+}
+function polDictInform(d){
+  const ap=Object.keys(G.side).filter(u=>G.side[u]==="A"&&u!==d);
+  G.q.push([d,{info:"La dictature est en marche ! Apolitiques : "+(ap.map(nm).join(", ")||"aucun")+". Ta voix compte maintenant double."}]);
+  G.log.push("Dictature des Apolitiques instaurée par "+nm(d));
+}
+const dictActive=()=>!!(G.pol&&G.dict&&ST.alive[G.dict]);
+function polWinner(al){
+  if(!G.pres) return null;
+  const ok=x=>!!G.pres[x]&&!!ST.alive[G.pres[x]], gO=ok("G"), dO=ok("D"), dic=!!G.dict&&!!ST.alive[G.dict];
+  if(!G.dict){if(gO&&dO) return null; if(!gO&&!dO) return "personne (les deux Présidents sont morts)"; return gO?"la Gauche":"la Droite"}
+  const SOLOS=["ange","bouffon","flute","pyro","angedechu","angegardien","mask"], solos=al.some(u=>SOLOS.includes(G.roles[u]));
+  const c=[gO&&"la Gauche",dO&&"la Droite",dic&&"la dictature des Apolitiques",(solos&&!dic)&&"les solitaires"].filter(Boolean);
+  return c.length===1?c[0]:c.length===0?"personne":null;
 }
 const replay=()=>updateDoc(doc(db,"rooms",roomCode),{status:"lobby"}).catch(fail);
 async function backToLobby(){
